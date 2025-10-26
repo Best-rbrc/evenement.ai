@@ -108,10 +108,7 @@ AI-Event-Planner-Agent/
 │   ├── event_planning_workflow.py  # Main workflow entrypoint
 │   └── plan_generation.py      # Iterative multi-round planning
 └── tools/                       # Utility tools for agents
-    ├── analysis_tools.py        # Event requirements & timeline analysis
-    ├── budgeting.py             # Budget allocation & tracking
-    ├── parsing.py               # Input parsing utilities
-    └── risk.py                  # Risk assessment tools
+   └── analysis_tools.py        # Event requirements & timeline analysis (used by Coordinator)
 ```
 
 ## Specialized Agents

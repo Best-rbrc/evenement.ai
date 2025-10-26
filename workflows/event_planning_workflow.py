@@ -1,80 +1,242 @@
+"""High level workflow entrypoint for event planning.
 
+Intelligent 3-phase workflow:
+1. Coordinator analyzes event and decides which agents to use + order
+2. Run those agents and collect outputs
+3. Coordinator reviews, refines, and finalizes (can call new agents if needed)
+
+Design:
+- Coordinator makes strategic decisions (which agents, what order, what refinements)
+- Specialists do domain-specific work
+- Coordinator can iterate and call additional agents as needed
+"""
 from typing import Dict, Any, List
-import asyncio
-
-def infer_required_agents(event_details: Dict[str, Any]) -> List[str]:
-    """Infer a conservative list of specialized agents to involve.
-
-    This is intentionally simple; it can be extended later with rules.
-    """
-    base = [
-        "venue",
-        "catering",
-        "programme",
-        "speakers",
-        "communication",
-        "registration",
-        "activities",
-        "entertainment",
-    ]
-
-    etype = str(event_details.get("event_type", "in_person")).lower()
-    if etype in ("virtual", "online"):
-        # virtual events don't need physical venue/catering
-        base = [b for b in base if b not in ("venue", "catering")]
-
-    # allow override from caller
-    explicit = event_details.get("required_agents")
-    if isinstance(explicit, list) and explicit:
-        # normalize to lowercase
-        normalized = [str(x).lower() for x in explicit]
-        return normalized
-
-    return base
+import json
 
 
 def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
-    """Synchronous entrypoint used by `app.py`.
+    """Intelligent multi-phase workflow with coordinator orchestration.
 
-    1. Infer or read required agents
-    2. Create specialized agents
-    3. Create a Coordinator agent that will run the iterative orchestration
-    4. Run the async `produce_actionable_plan` and return the result dict
+    Phase 1: Coordinator Planning
+    - Analyzes event requirements
+    - Decides which specialists are needed
+    - Determines optimal order of execution
+
+    Phase 2: Specialist Execution
+    - Calls each specialist in the determined order
+    - Collects all outputs
+
+    Phase 3: Coordinator Finalization
+    - Reviews all specialist outputs
+    - Identifies gaps, conflicts, or issues
+    - Calls additional agents if needed
+    - Produces final unified plan
     """
-    required_agents = infer_required_agents(event_details)
-
-    # Delay importing custom_agents factories until runtime so the module can
-    # be imported in environments without the full SDK installed.
+    # Import SDK components
     try:
+        from agents import Runner
         from custom_agents.base import create_specialized_agents
         from custom_agents.coordinator_agent import create_coordinator_agent
-    except Exception as exc:  # pragma: no cover - defensive
-        raise RuntimeError("Required custom_agents package failed to import: %s" % exc)
+    except Exception as exc:
+        raise RuntimeError(f"Required imports failed: {exc}")
 
-    # Create specialized agents (factories live in custom_agents/*)
-    specialized_agents = create_specialized_agents(required_agents)
+    print(f"\n{'='*60}")
+    print(f"🎉 AI EVENT PLANNER")
+    print(f"{'='*60}")
+    print(f"Event: {event_details['event_name']}")
+    print(f"Type: {event_details['event_type']}")
+    print(f"{'='*60}\n")
 
-    # Build a Coordinator agent to synthesize and manage handoffs
-    coordinator = create_coordinator_agent(event_details, required_agents, specialized_agents)
+    # ============================================================
+    # PHASE 1: COORDINATOR PLANNING
+    # ============================================================
+    print("📋 PHASE 1: Strategic Planning\n")
+    print("Coordinator analyzing event requirements...\n")
 
-    # Import the heavy plan generation implementation here to avoid import
-    # failures at module import time when the SDK is unavailable.
+    # Create all available specialists (coordinator will decide which to use)
+    all_agent_types = [
+        "venue", "catering", "programme", "speakers", 
+        "communication", "registration", "activities", "entertainment"
+    ]
+    all_specialists = create_specialized_agents(all_agent_types)
+    
+    # Create coordinator with handoffs to all specialists
+    coordinator = create_coordinator_agent(event_details, all_agent_types, all_specialists)
+
+    planning_prompt = f"""You are the Event Planning Coordinator analyzing requirements for "{event_details['event_name']}".
+
+Event Details:
+{json.dumps(event_details, indent=2)}
+
+Your task for PHASE 1 - STRATEGIC PLANNING:
+
+1. Analyze the event type, budget, guest count, and special requirements
+2. Decide which specialist agents are needed for this event
+3. Determine the optimal ORDER to call them (e.g., venue first, then catering based on venue kitchen)
+4. Identify any special considerations or constraints
+
+Available specialists:
+- venue: Physical location selection and logistics
+- catering: Food, beverages, and dining service
+- programme: Event schedule and session planning
+- speakers: Speaker/presenter coordination
+- communication: Marketing, invitations, attendee communications
+- registration: Registration systems and check-in
+- activities: Team-building and recreational activities
+- entertainment: Entertainment and performance coordination
+
+Output your plan as JSON:
+{{
+  "analysis": "Brief analysis of event needs",
+  "required_agents": ["agent1", "agent2", ...],  // In optimal execution order
+  "execution_order_rationale": "Why this order makes sense",
+  "special_considerations": ["consideration1", "consideration2", ...]
+}}
+
+Be strategic and selective - don't include agents that aren't truly needed for this event type."""
+
+    planning_result = Runner.run_sync(coordinator, planning_prompt)
+    
+    # Parse the planning decision
     try:
-        from workflows.plan_generation import produce_actionable_plan
-    except Exception as exc:  # pragma: no cover - defensive
-        raise RuntimeError("Required plan_generation module failed to import: %s" % exc)
+        planning_data = json.loads(planning_result.final_output)
+        required_agents = planning_data.get("required_agents", all_agent_types[:6])
+        print(f"✅ Planning complete!")
+        print(f"\n� Selected agents (in order): {', '.join(required_agents)}")
+        print(f"💡 Rationale: {planning_data.get('execution_order_rationale', 'N/A')}\n")
+    except:
+        # Fallback if parsing fails
+        required_agents = all_agent_types[:6]
+        print(f"⚠️  Using default agent selection\n")
 
-    # Delegate to the async plan-generation function
-    try:
-        result = asyncio.run(produce_actionable_plan(coordinator, event_details, required_agents))
-    except RuntimeError:
-        # If an event loop is already running (e.g., in some test harnesses),
-        # create a new loop and run it there.
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(produce_actionable_plan(coordinator, event_details, required_agents))
-        finally:
-            asyncio.set_event_loop(None)
+    # ============================================================
+    # PHASE 2: SPECIALIST EXECUTION
+    # ============================================================
+    print(f"\n{'='*60}")
+    print("🔧 PHASE 2: Specialist Execution")
+    print(f"{'='*60}\n")
+    
+    specialist_outputs = {}
+    
+    for idx, agent_name in enumerate(required_agents, 1):
+        if agent_name not in all_specialists:
+            print(f"⚠️  Skipping unknown agent: {agent_name}")
+            continue
+            
+        agent = all_specialists[agent_name]
+        
+        print(f"[{idx}/{len(required_agents)}] 🎯 {agent_name.title()} Specialist")
+        print(f"{'─'*40}")
+        
+        # Build context-aware prompt with prior outputs
+        context = ""
+        if specialist_outputs:
+            context = f"\n\nPrevious specialist outputs for context:\n{json.dumps(specialist_outputs, indent=2)}"
+        
+        specialist_prompt = f"""You are the {agent_name} specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
 
-    return result
+Event Details:
+{json.dumps(event_details, indent=2)}{context}
+
+Your task:
+Provide detailed, actionable recommendations for {agent_name}, including:
+- Specific options with names and costs where applicable
+- Timeline and logistics considerations
+- Budget estimates (itemized)
+- Top recommendations with rationale
+- Any dependencies on other areas
+
+Output structured JSON with your recommendations."""
+
+        result = Runner.run_sync(agent, specialist_prompt)
+        specialist_outputs[agent_name] = result.final_output
+        
+        print(f"✓ Complete\n")
+
+    # ============================================================
+    # PHASE 3: COORDINATOR FINALIZATION
+    # ============================================================
+    print(f"\n{'='*60}")
+    print("🎯 PHASE 3: Review, Refinement & Finalization")
+    print(f"{'='*60}\n")
+    
+    print("Coordinator reviewing all outputs...\n")
+
+    finalization_prompt = f"""You are the Event Planning Coordinator finalizing the plan for "{event_details['event_name']}".
+
+You have received outputs from these specialists: {', '.join(required_agents)}
+
+Event Details:
+{json.dumps(event_details, indent=2)}
+
+All Specialist Outputs:
+{json.dumps(specialist_outputs, indent=2)}
+
+Your task for PHASE 3 - FINALIZATION:
+
+1. REVIEW all specialist outputs for:
+   - Budget conflicts (total cost vs available budget)
+   - Logical inconsistencies (e.g., venue capacity vs guest count)
+   - Missing critical information
+   - Interdependencies and conflicts
+
+2. IF YOU IDENTIFY ISSUES OR GAPS:
+   - You can handoff to ANY specialist agent (even ones not called yet) to:
+     * Refine their recommendations with adjusted constraints
+     * Fill in missing information
+     * Resolve conflicts with other areas
+   - Example: "Venue costs exceed budget - handoff to venue agent with reduced budget"
+   - Example: "We need decoration planning - handoff to decoration agent"
+
+3. SYNTHESIZE the final comprehensive event plan including:
+   - Executive summary (2-3 paragraphs)
+   - Complete event timeline (with all areas integrated)
+   - Detailed budget breakdown by category with totals
+   - All specialist recommendations (organized and refined)
+   - Risk assessment with mitigation strategies
+   - Prioritized action items with deadlines
+   - Assumptions made
+
+4. OUTPUT as valid JSON:
+{{
+  "executive_summary": "...",
+  "timeline": [
+    {{"phase": "...", "tasks": [...], "deadline": "..."}}
+  ],
+  "budget": {{
+    "total_available": "...",
+    "total_allocated": "...",
+    "by_category": {{}},
+    "status": "within_budget | over_budget | at_limit"
+  }},
+  "recommendations": {{
+    "venue": {{}},
+    "catering": {{}},
+    ...
+  }},
+  "risks": [
+    {{"risk": "...", "severity": "high|medium|low", "mitigation": "..."}}
+  ],
+  "action_items": [
+    {{"action": "...", "owner": "...", "deadline": "...", "priority": "high|medium|low"}}
+  ],
+  "assumptions": [...]
+}}
+
+Use handoffs if needed to refine or add information. Then provide your final synthesized plan."""
+
+    final_result = Runner.run_sync(coordinator, finalization_prompt)
+    
+    print("✅ Finalization complete!\n")
+    
+    # Return comprehensive results
+    return {
+        "event_details": event_details,
+        "planning_phase": planning_result.final_output,
+        "specialist_outputs": specialist_outputs,
+        "final_plan": final_result.final_output,
+        "agents_used": required_agents,
+        "success": True
+    }
+
+
