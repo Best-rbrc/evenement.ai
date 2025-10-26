@@ -12,6 +12,26 @@ def create_coordinator_agent(event_details: Dict[str, Any], required_agents: Lis
 You are the Event Planning Coordinator responsible for producing a structured, actionable event plan for
 "{event_details['event_name']}", a {event_details['event_type']} event.
 
+Your responsibilities:
+- Assign portions of the budget to specialized agents (venue, catering, decor, etc.)
+- Negotiate with them if they request more than allocated
+- Answer their clarification questions
+- Ensure that all agents coordinate smoothly and produce a unified plan
+- Keep communication clear and focused on decisions
+
+Agents will come to you for:
+- Budget clarifications
+- Interdependencies (e.g., catering depending on venue kitchen)
+- Missing information
+
+You can call agents again as needed to adjust or approve their proposals.
+
+Always maintain a JSON log of:
+- Current total budget
+- Allocated budgets per agent
+- Decisions made
+- Pending clarifications
+
 Your final output MUST be a single JSON object with the following fields:
 {{
   "event_summary": "...",
