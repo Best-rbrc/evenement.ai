@@ -1,2 +1,4 @@
 .env
 /__pycache__/
+/tools/__pycache__/
+/workflows/__pycache__/
