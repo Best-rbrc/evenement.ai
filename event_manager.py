@@ -15,7 +15,6 @@ class EventPlanner:
         self.event_details = {}
         self.required_agents = []
         self.specialized_agents = {}
-        self.coordinator = None
         
     async def collect_event_details(self) -> Dict[str, Any]:
         """Collect basic event information from the user."""
@@ -118,16 +117,15 @@ class EventPlanner:
         print("✅ All agents initialized and ready!")
     
     async def run_planning_session(self):
-        """Run the main planning session with the coordinator agent."""
-        print(f"\n🚀 Starting planning session for '{self.event_details['event_name']}' (no timeline mode)...")
-        print("Producing an actionable plan (no timeline) now.\n")
-
+        """Run the planning session using the Coordinator Agent."""
+        print(f"\n🚀 Starting planning session for '{self.event_details['event_name']}'...\n")
         try:
-            plan = produce_actionable_plan(self.event_details, self.required_agents)
+            plan = await produce_actionable_plan(self.coordinator, self.event_details, self.required_agents)
             return plan
         except Exception as e:
-            print(f"❌ Error producing actionable plan: {e}")
+            print(f"❌ Error producing plan: {e}")
             return None
+
     
     def run(self):
         """Main execution method."""

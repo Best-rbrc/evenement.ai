@@ -1,6 +1,6 @@
 """Specialized agents for different aspects of event planning."""
 from typing import Dict, List
-from agents import Agent, function_tool
+from agents import Agent, function_tool, WebSearchTool
 from config import AGENT_SPECIALIZATIONS
 
 
