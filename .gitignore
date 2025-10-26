@@ -1,2 +1,13 @@
 .env
-/__pycache__/
+
+# Python cache files
+*.py[cod]
+**/__pycache__/
+
+# OS files
+.DS_Store
+
+# Tool-specific caches
+/tools/__pycache__/
+/workflows/__pycache__/
+/custom_agents/__pycache__/
