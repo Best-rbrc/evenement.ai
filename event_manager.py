@@ -4,7 +4,7 @@ from typing import Dict, List, Any
 from config import EVENT_TYPES, AGENT_SPECIALIZATIONS
 from workflows.plan_generation import produce_actionable_plan
 from workflows.coordinator_agent import create_coordinator_agent
-from custom_agents.specialized_agents import create_specialized_agents
+from custom_agents.base import create_specialized_agents
 import json
 
 
