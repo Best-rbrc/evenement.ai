@@ -1,10 +1,10 @@
 """AI Event Planner - Main application with user input collection and agent coordination."""
 import asyncio
 from typing import Dict, List, Any
-from agents import Agent, Runner, function_tool
-from config import EVENT_TYPES, AGENT_SPECIALIZATIONS, OPENAI_API_KEY
-from specialized_agents import create_specialized_agents
-from coordinator_agent import create_coordinator_agent, produce_actionable_plan
+from config import EVENT_TYPES, AGENT_SPECIALIZATIONS
+from workflows.plan_generation import produce_actionable_plan
+from workflows.coordinator_agent import create_coordinator_agent
+from custom_agents.specialized_agents import create_specialized_agents
 import json
 
 
