@@ -1,6 +1,5 @@
 # workflows/coordinator_agent.py
 from agents import Agent
-from config import AGENT_SPECIALIZATIONS
 from tools.analysis_tools import analyze_event_requirements, create_event_timeline, coordinate_agent_tasks
 from typing import Dict, List, Any
 
