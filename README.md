@@ -96,6 +96,7 @@ AI-Event-Planner-Agent/
 │   ├── programme_agent.py      # Event scheduling & session planning
 │   ├── communication_agent.py  # Marketing & invitations
 │   ├── registration_agent.py   # Registration systems & check-in
+│   ├── form_agent.py          # Tally form creation (MCP integration)
 │   ├── activities_agent.py     # Recreational activities planning
 │   ├── entertainment_agent.py  # Entertainment booking & coordination
 │   └── archive/                # Optional/archived agents
@@ -105,10 +106,9 @@ AI-Event-Planner-Agent/
 │       ├── seating_agent.py
 │       └── ...
 ├── workflows/                   # Workflow orchestration logic
-│   ├── event_planning_workflow.py  # Main workflow entrypoint
-│   └── plan_generation.py      # Iterative multi-round planning
+│   └── event_planning_workflow.py  # Main 3-phase intelligent workflow
 └── tools/                       # Utility tools for agents
-   └── analysis_tools.py        # Event requirements & timeline analysis (used by Coordinator)
+    └── analysis_tools.py       # (Currently empty - coordinator uses handoffs)
 ```
 
 ## Specialized Agents
@@ -143,39 +143,61 @@ The system includes **8 core specialized agents** and several optional archived 
 
 ### Architecture Overview
 
-The system uses a **Coordinator Agent** pattern with specialized sub-agents:
+The system uses a **3-Phase Intelligent Workflow** with a Coordinator Agent pattern:
 
-1. **Workflow Orchestration** (`workflows/event_planning_workflow.py`)
-   - Receives event details from the user
-   - Infers which specialized agents are needed based on event type
-   - Creates specialized agents and a coordinator agent
-   - Delegates multi-round orchestration to `produce_actionable_plan`
+#### Phase 1: Strategic Planning
+- Coordinator analyzes event requirements
+- Decides which specialist agents are needed
+- Determines optimal execution order
+- Identifies special considerations and constraints
 
-2. **Iterative Plan Generation** (`workflows/plan_generation.py`)
-   - Runs multiple rounds, one per specialized agent
-   - Each agent receives full context (event details + prior agent outputs)
-   - Coordinator synthesizes individual sections into a unified master plan
-   - Handles clarifications, budget negotiations, and interdependencies
+#### Phase 2: Specialist Execution
+- Calls each specialist in the determined order
+- Each specialist receives full context (event details + prior outputs)
+- Collects structured outputs from all specialists
+- Maintains coordination across interdependent areas (e.g., venue → catering)
 
-3. **Coordinator Agent** (`custom_agents/coordinator_agent.py`)
-   - Central orchestrator that assigns budgets, answers questions, and approves proposals
-   - Maintains a JSON log of decisions, allocations, and pending clarifications
-   - Produces final unified JSON output with all event sections
+#### Phase 3: Review, Refinement & Finalization
+- Coordinator reviews all specialist outputs
+- Identifies budget conflicts, gaps, or inconsistencies
+- Can handoff to additional specialists as needed (even ones not initially called)
+- Synthesizes final comprehensive event plan
 
-4. **Specialized Agents** (`custom_agents/*.py`)
+### Key Components
+
+1. **Main Workflow** (`workflows/event_planning_workflow.py`)
+   - `run_event_planning()`: Orchestrates the entire 3-phase process
+   - Uses OpenAI Agents SDK's `Runner.run_sync()` for each phase
+   - Handles handoffs between coordinator and specialists
+
+2. **Coordinator Agent** (`custom_agents/coordinator_agent.py`)
+   - Central orchestrator with strategic decision-making
+   - Manages budget allocation and negotiations
+   - Reviews outputs and identifies issues
+   - Can dynamically call any specialist agent as needed
+   - Produces final unified JSON output
+
+3. **Specialized Agents** (`custom_agents/*.py`)
    - Domain experts for venue, catering, speakers, etc.
-   - Use function tools (e.g., `WebSearchTool`, custom budget/analysis tools)
-   - Produce structured JSON outputs for their respective sections
+   - Use tools like `WebSearchTool` for real-world data
+   - Produce structured JSON outputs for their sections
+   - Examples: `venue_agent.py`, `catering_agent.py`, `speaker_agent.py`
 
-### Why Keep the Coordinator Agent?
+4. **Agent Handoffs**
+   - Coordinator can handoff to any specialist at any time
+   - Specialists work with context from prior specialists
+   - Enables iterative refinement and dynamic planning
 
-The Coordinator Agent is **retained** because:
-- It centralizes synthesis and handoffs (used by the existing `produce_actionable_plan` implementation)
-- It manages budget allocation and negotiation across specialized agents
-- It answers clarification questions from specialists without requiring user input
-- It maintains a unified decision log and produces a single coherent master plan
+### Why the Coordinator Agent?
 
-This design matches the OpenAI Agents SDK's recommended patterns for multi-agent systems with handoffs and structured outputs.
+The Coordinator Agent is essential because it:
+- Makes strategic decisions (which agents, what order)
+- Centralizes budget management and negotiation
+- Reviews and synthesizes all specialist outputs
+- Handles iterative refinement (can call agents multiple times)
+- Produces a coherent final plan from distributed specialist work
+
+This design follows OpenAI Agents SDK best practices for multi-agent orchestration with handoffs.
 
 ## Future Enhancements
 
@@ -258,16 +280,19 @@ pytest tests/
 2. Add the import and mapping in `custom_agents/base.py` (`AGENT_CREATORS` dict)
 3. Add the agent to `custom_agents/__init__.py` exports
 4. Update `config.py` with agent description (optional)
-5. Update `workflows/event_planning_workflow.py` `infer_required_agents()` if needed
+5. The workflow will automatically make it available to the coordinator
 
-### Coordinator vs Orchestrator
+### Architecture Decisions
 
-**Decision**: The **Coordinator Agent is retained** because:
-- The existing `produce_actionable_plan` implementation (from `workflows/plan_generation.py`) uses it for multi-round orchestration and synthesis
-- It centralizes budget allocation, clarification handling, and final synthesis
-- It follows OpenAI Agents SDK patterns for multi-agent systems with handoffs
+**Coordinator Agent**: The Coordinator Agent is retained and essential because:
+- Makes strategic decisions about which specialists to use and in what order
+- Manages budget allocation and negotiation across specialists
+- Reviews outputs, identifies gaps/conflicts, and iteratively refines
+- Can dynamically handoff to any specialist (even ones not initially called)
+- Synthesizes all specialist outputs into a cohesive final plan
+- Follows OpenAI Agents SDK patterns for multi-agent orchestration
 
-The separate `Orchestrator` class (from the external `Event Planner/orchestrator` package) is **not needed** in this codebase because the workflow uses the SDK's `Runner.run_streamed` directly and the Coordinator agent handles synthesis.
+**No Separate Orchestrator Class**: The workflow uses OpenAI SDK's `Runner` directly with the Coordinator agent handling synthesis through handoffs.
 
 ## License
 
