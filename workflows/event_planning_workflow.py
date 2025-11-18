@@ -12,6 +12,13 @@ Design:
 """
 from typing import Dict, Any, List
 import json
+import datetime
+
+
+def get_current_date_context() -> str:
+    """Get current date context for agents."""
+    current_date = datetime.datetime.now()
+    return f"Today's date: {current_date.strftime('%B %d, %Y')} ({current_date.strftime('%Y-%m-%d')})"
 
 
 def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
@@ -45,6 +52,7 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     print(f"{'='*60}")
     print(f"Event: {event_details['event_name']}")
     print(f"Type: {event_details['event_type']}")
+    print(f"Date Context: {get_current_date_context()}")
     print(f"{'='*60}\n")
 
     # ============================================================
@@ -56,7 +64,7 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     # Create all available specialists (coordinator will decide which to use)
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
-        "communication", "registration", "activities", "entertainment"
+        "communication", "registration", "activities", "entertainment", "calendar"
     ]
     all_specialists = create_specialized_agents(all_agent_types)
     
@@ -64,6 +72,8 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     coordinator = create_coordinator_agent(event_details, all_agent_types, all_specialists)
 
     planning_prompt = f"""You are the Event Planning Coordinator analyzing requirements for "{event_details['event_name']}".
+
+{get_current_date_context()}
 
 Event Details:
 {json.dumps(event_details, indent=2)}
@@ -84,6 +94,7 @@ Available specialists:
 - registration: Registration systems and check-in
 - activities: Team-building and recreational activities
 - entertainment: Entertainment and performance coordination
+- calendar: Calendar invites and ICS file generation
 
 Output your plan as JSON:
 {{
@@ -135,6 +146,8 @@ Be strategic and selective - don't include agents that aren't truly needed for t
         
         specialist_prompt = f"""You are the {agent_name} specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
 
+{get_current_date_context()}
+
 Event Details:
 {json.dumps(event_details, indent=2)}{context}
 
@@ -163,6 +176,8 @@ Output structured JSON with your recommendations."""
     print("Coordinator reviewing all outputs...\n")
 
     finalization_prompt = f"""You are the Event Planning Coordinator finalizing the plan for "{event_details['event_name']}".
+
+{get_current_date_context()}
 
 You have received outputs from these specialists: {', '.join(required_agents)}
 
@@ -229,13 +244,68 @@ Use handoffs if needed to refine or add information. Then provide your final syn
     
     print("✅ Finalization complete!\n")
     
+    # ============================================================
+    # PHASE 4: Event Outputs e.g. CALENDAR GENERATION 
+    # ============================================================
+    print(f"\n{'='*60}")
+    print("📅 PHASE 4: Event Outputs e.g. CALENDAR GENERATION")
+    print(f"{'='*60}\n")
+    
+    print("Creating calendar invite file...\n")
+    
+    # Always create calendar invite as final step
+    calendar_agent = all_specialists["calendar"]
+    
+    calendar_prompt = f"""You are the Calendar Specialist for "{event_details['event_name']}".
+
+{get_current_date_context()}
+
+Event Details:
+{json.dumps(event_details, indent=2)}
+
+All Planning Outputs:
+{json.dumps(specialist_outputs, indent=2)}
+
+Final Plan:
+{final_result.final_output}
+
+Your task:
+Create a comprehensive calendar invite (.ics file) for this event including:
+
+1. **Extract Key Information:**
+   - Event name, date, and location
+   - Determine appropriate start and end times based on event type and outputs
+   - Create rich description from planning details
+
+2. **Generate Calendar File:**
+   - Use the generate_ics_file tool to create the .ics file
+   - Include venue information from venue specialist
+   - Add timing from programme specialist if available
+   - Set appropriate reminders and notifications
+
+3. **Provide File Details:**
+   - Confirm successful file creation
+   - Provide file path for user access
+   - Include instructions for importing to calendar apps
+
+Output JSON with:
+- calendar_file_path
+- event_summary
+- timing_details
+- import_instructions"""
+
+    calendar_result = Runner.run_sync(calendar_agent, calendar_prompt)
+    
+    print("✅ Calendar invite generated!\n")
+    
     # Return comprehensive results
     return {
         "event_details": event_details,
         "planning_phase": planning_result.final_output,
         "specialist_outputs": specialist_outputs,
         "final_plan": final_result.final_output,
-        "agents_used": required_agents,
+        "calendar_invite": calendar_result.final_output,
+        "agents_used": required_agents + ["calendar"],
         "success": True
     }
 

@@ -25,4 +25,5 @@ AGENT_SPECIALIZATIONS = {
     "fundraising": "Plan fundraising activities and donor engagement.",
     "activities": "Plan activities, team-building, and side-events.",
     "accommodation": "Source and negotiate room blocks and logistics.",
+    "calendar": "Generate calendar invites and ICS files for the event.",
 }
