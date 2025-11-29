@@ -64,7 +64,7 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     # Create all available specialists (coordinator will decide which to use)
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
-        "communication", "registration", "activities", "entertainment", "calendar"
+        "communication", "registration", "activities", "entertainment", "calendar", "form"
     ]
     all_specialists = create_specialized_agents(all_agent_types)
     
@@ -95,6 +95,7 @@ Available specialists:
 - activities: Team-building and recreational activities
 - entertainment: Entertainment and performance coordination
 - calendar: Calendar invites and ICS file generation
+- form: Online registration/RSVP form creation (auto-generated in Phase 4)
 
 Output your plan as JSON:
 {{
@@ -245,15 +246,15 @@ Use handoffs if needed to refine or add information. Then provide your final syn
     print("✅ Finalization complete!\n")
     
     # ============================================================
-    # PHASE 4: Event Outputs e.g. CALENDAR GENERATION 
+    # PHASE 4: Event Outputs (CALENDAR & REGISTRATION FORM)
     # ============================================================
     print(f"\n{'='*60}")
-    print("📅 PHASE 4: Event Outputs e.g. CALENDAR GENERATION")
+    print("📅 PHASE 4: Event Outputs (Calendar & Registration Form)")
     print(f"{'='*60}\n")
     
+    # Create calendar invite
     print("Creating calendar invite file...\n")
     
-    # Always create calendar invite as final step
     calendar_agent = all_specialists["calendar"]
     
     calendar_prompt = f"""You are the Calendar Specialist for "{event_details['event_name']}".
@@ -298,6 +299,53 @@ Output JSON with:
     
     print("✅ Calendar invite generated!\n")
     
+    # Create registration form
+    print("Creating event registration form...\n")
+    
+    form_agent = all_specialists["form"]
+    
+    form_prompt = f"""Create a registration form for "{event_details['event_name']}".
+
+Event Details:
+{json.dumps(event_details, indent=2)}
+
+Specialist Planning Context:
+{json.dumps(specialist_outputs, indent=2)}
+
+Final Plan Summary:
+{final_result.final_output[:1500]}...
+
+Use the complete event context above to design an appropriate registration form with relevant fields for this {event_details.get('event_type')} event."""
+
+    # Retry logic for rate limiting
+    import asyncio
+    max_retries = 3
+    form_result = None
+    
+    for attempt in range(max_retries):
+        try:
+            form_result = Runner.run_sync(form_agent, form_prompt)
+            break
+        except Exception as e:
+            if "rate_limit" in str(e).lower() and attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                print(f"⏳ Rate limit hit. Waiting {wait_time}s before retry...\n")
+                import time
+                time.sleep(wait_time)
+            else:
+                print(f"⚠️  Form creation error: {e}\n")
+                form_result = type('obj', (object,), {'final_output': '{"status": "error", "message": "Form creation failed"}'})()
+                break
+    
+    # Extract form URL from output
+    from custom_agents.form_agent import extract_form_url_from_output
+    form_data = extract_form_url_from_output(form_result.final_output if form_result else "")
+    
+    if form_data.get("status") == "success":
+        print(f"✅ Registration form created: {form_data.get('form_url')}\n")
+    else:
+        print(f"⚠️  Form creation had issues. Check output for details.\n")
+    
     # Return comprehensive results
     return {
         "event_details": event_details,
@@ -305,7 +353,8 @@ Output JSON with:
         "specialist_outputs": specialist_outputs,
         "final_plan": final_result.final_output,
         "calendar_invite": calendar_result.final_output,
-        "agents_used": required_agents + ["calendar"],
+        "registration_form": form_data,
+        "agents_used": required_agents + ["calendar", "form"],
         "success": True
     }
 
