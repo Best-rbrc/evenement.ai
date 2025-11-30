@@ -13,6 +13,7 @@ Design:
 from typing import Dict, Any, List
 import json
 import datetime
+import asyncio
 
 
 def get_current_date_context() -> str:
@@ -39,6 +40,16 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     - Calls additional agents if needed
     - Produces final unified plan
     """
+    # Ensure an asyncio event loop exists for sync runner on Python 3.13+
+    def _ensure_loop():
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            loop_local = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop_local)
+
+    _ensure_loop()
+
     # Import SDK components
     try:
         from agents import Runner
@@ -107,7 +118,36 @@ Output your plan as JSON:
 
 Be strategic and selective - don't include agents that aren't truly needed for this event type."""
 
-    planning_result = Runner.run_sync(coordinator, planning_prompt)
+    # Run coordinator planning with rate-limit aware retries
+    _ensure_loop()
+    def _run_sync_with_backoff(agent, prompt, max_retries: int = 3):
+        import time, re, random
+        last_exc = None
+        for attempt in range(max_retries):
+            try:
+                _ensure_loop()
+                return Runner.run_sync(agent, prompt)
+            except Exception as e:
+                last_exc = e
+                msg = str(e)
+                if "rate_limit_exceeded" in msg or "Please try again in" in msg:
+                    # Parse suggested wait, else exponential backoff
+                    wait_time = 2 ** attempt
+                    m = re.search(r"Please try again in\s+([0-9]+\.?[0-9]*)s", msg)
+                    if m:
+                        try:
+                            wait_time = float(m.group(1))
+                        except Exception:
+                            pass
+                    wait_time += random.uniform(0.3, 0.7)
+                    print(f"⏳ Rate limit. Waiting {wait_time:.2f}s before retry...\n")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    break
+        raise last_exc
+
+    planning_result = _run_sync_with_backoff(coordinator, planning_prompt)
     
     # Parse the planning decision
     try:
@@ -162,6 +202,7 @@ Provide detailed, actionable recommendations for {agent_name}, including:
 
 Output structured JSON with your recommendations."""
 
+        _ensure_loop()
         result = Runner.run_sync(agent, specialist_prompt)
         specialist_outputs[agent_name] = result.final_output
         
@@ -241,7 +282,8 @@ Your task for PHASE 3 - FINALIZATION:
 
 Use handoffs if needed to refine or add information. Then provide your final synthesized plan."""
 
-    final_result = Runner.run_sync(coordinator, finalization_prompt)
+    _ensure_loop()
+    final_result = _run_sync_with_backoff(coordinator, finalization_prompt)
     
     print("✅ Finalization complete!\n")
     
@@ -295,6 +337,7 @@ Output JSON with:
 - timing_details
 - import_instructions"""
 
+    _ensure_loop()
     calendar_result = Runner.run_sync(calendar_agent, calendar_prompt)
     
     print("✅ Calendar invite generated!\n")
@@ -302,49 +345,169 @@ Output JSON with:
     # Create registration form
     print("Creating event registration form...\n")
     
-    form_agent = all_specialists["form"]
-    
-    form_prompt = f"""Create a registration form for "{event_details['event_name']}".
+    form_agent = all_specialists["form"]  # Kept for consistency, but we'll manage a fresh MCP context per attempt
 
-Event Details:
-{json.dumps(event_details, indent=2)}
+    # Compact prompt to reduce tokens: only essentials
+    concise_event = {
+        "event_name": event_details.get("event_name"),
+        "event_type": event_details.get("event_type"),
+        "event_date": event_details.get("event_date"),
+        "location": event_details.get("location_preference"),
+        "guest_count": event_details.get("guest_count"),
+        "special_requirements": event_details.get("special_requirements"),
+    }
+    # Derive any minimal context from specialists without full dumps
+    minimal_context = {}
+    if "venue" in specialist_outputs:
+        minimal_context["venue"] = "include venue/address field if available"
+    if "catering" in specialist_outputs:
+        minimal_context["catering"] = "collect dietary restrictions"
+    if "registration" in specialist_outputs:
+        minimal_context["registration"] = "ensure attendance and contact fields"
+    if "programme" in specialist_outputs:
+        minimal_context["programme"] = "optional session preferences"
 
-Specialist Planning Context:
-{json.dumps(specialist_outputs, indent=2)}
+    form_prompt = (
+        f"Create an RSVP/registration form for '{event_details.get('event_name')}'.\n\n"
+        f"Essentials: {json.dumps(concise_event, indent=2)}\n\n"
+        f"Guidelines: {json.dumps(minimal_context, indent=2)}\n\n"
+        "Return ONLY valid JSON with: {\"form_url\": \"https://tally.so/r/xxxxx\", \"status\": \"success\"}."
+    )
 
-Final Plan Summary:
-{final_result.final_output[:1500]}...
+    # Helper: run the form step with a dedicated MCP stdio context (mirrors your working script)
+    async def _run_form_once(prompt: str):
+        import os
+        import re
+        import json as _json
+        from agents import Agent as _Agent, Runner as _Runner
+        from agents.mcp import MCPServerStdio as _MCPServerStdio
+        from agents.model_settings import ModelSettings as _ModelSettings
 
-Use the complete event context above to design an appropriate registration form with relevant fields for this {event_details.get('event_type')} event."""
+        tally = _MCPServerStdio({
+            "command": "npx",
+            "args": [
+                "mcp-remote",
+                "https://api.tally.so/mcp",
+                "--header", f"Authorization: Bearer {os.getenv('TALLY_API_KEY','')}",
+            ],
+        })
 
-    # Retry logic for rate limiting
-    import asyncio
-    max_retries = 3
+        model_settings = _ModelSettings(max_tokens=4000, temperature=0.7)
+
+        agent = _Agent(
+            name="Tally Form Agent",
+            instructions=(
+                "Use the Tally MCP tools to create an RSVP/registration form. "
+                "After successful form creation, return ONLY valid JSON: "
+                '{"form_url": "https://tally.so/r/xxxxx", "status": "success"}. '
+                "No extra text or markdown."
+            ),
+            mcp_servers=[tally],
+            model_settings=model_settings,
+        )
+
+        # Allow overriding the model used for this step via env FORM_MODEL
+        # If supported by the SDK, it will read the OPENAI_MODEL env var.
+        prev_model = os.environ.get("OPENAI_MODEL")
+        form_model = os.environ.get("FORM_MODEL")
+        if form_model:
+            os.environ["OPENAI_MODEL"] = form_model
+        try:
+            async with tally:
+                result = await _Runner.run(agent, prompt)
+        finally:
+            # Restore previous model env to avoid side effects on other steps
+            if form_model is not None:
+                if prev_model is None:
+                    os.environ.pop("OPENAI_MODEL", None)
+                else:
+                    os.environ["OPENAI_MODEL"] = prev_model
+            return result
+
+    # Retry logic for transient errors (rate limits, remote SSE timeouts)
+    max_retries = 5
     form_result = None
     
     for attempt in range(max_retries):
         try:
-            form_result = Runner.run_sync(form_agent, form_prompt)
+            _ensure_loop()
+            # Prefer the managed-context path which reliably opens/closes the MCP stdio bridge
+            loop = asyncio.get_event_loop()
+            form_result = loop.run_until_complete(_run_form_once(form_prompt))
             break
         except Exception as e:
-            if "rate_limit" in str(e).lower() and attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                print(f"⏳ Rate limit hit. Waiting {wait_time}s before retry...\n")
-                import time
+            err_text = str(e)
+            is_transient = (
+                "rate_limit" in err_text.lower()
+                or "StreamableHTTPError" in err_text
+                or "SSE" in err_text
+                or " 524" in err_text
+            )
+            if is_transient and attempt < max_retries - 1:
+                import time, random, re
+                # Start with exponential backoff
+                base_wait = 2 ** attempt
+                reason = "rate limit" if "rate_limit" in err_text.lower() else "remote connection"
+                # Parse server-provided wait hint: "Please try again in Xs"
+                match = re.search(r"Please try again in\s+([0-9]+\.?[0-9]*)s", err_text)
+                if match:
+                    try:
+                        base_wait = float(match.group(1))
+                    except Exception:
+                        pass
+                # Apply a multiplier and clamp to a sensible range
+                wait_time = max(5.0, min(30.0, base_wait * 1.5))
+                # Add jitter to avoid thundering herd
+                wait_time += random.uniform(0.5, 1.2)
+                print(f"⏳ Transient {reason} issue. Waiting {wait_time:.2f}s before retry...\n")
                 time.sleep(wait_time)
+                continue
             else:
                 print(f"⚠️  Form creation error: {e}\n")
                 form_result = type('obj', (object,), {'final_output': '{"status": "error", "message": "Form creation failed"}'})()
                 break
     
-    # Extract form URL from output
+    # Extract form URL from output; on failure, create a local fallback schema
     from custom_agents.form_agent import extract_form_url_from_output
     form_data = extract_form_url_from_output(form_result.final_output if form_result else "")
-    
+
     if form_data.get("status") == "success":
         print(f"✅ Registration form created: {form_data.get('form_url')}\n")
     else:
-        print(f"⚠️  Form creation had issues. Check output for details.\n")
+        print(f"⚠️  Remote form creation had issues. Generating local fallback schema...\n")
+        try:
+            import os, json as _json
+            os.makedirs("event_outputs", exist_ok=True)
+            # Minimal, useful form schema based on available details
+            fallback_schema = {
+                "title": f"Registration — {event_details.get('event_name','Event')}",
+                "fields": [
+                    {"id": "name", "label": "Full Name", "type": "text", "required": True},
+                    {"id": "email", "label": "Email", "type": "email", "required": True},
+                    {"id": "attendance", "label": "Will you attend?", "type": "select", "options": ["Yes", "No"], "required": True},
+                    {"id": "affiliation", "label": "Affiliation / Company", "type": "text", "required": False},
+                    {"id": "dietary", "label": "Dietary Restrictions", "type": "text", "required": False},
+                    {"id": "accessibility", "label": "Accessibility Needs", "type": "text", "required": False}
+                ],
+                "event": {
+                    "name": event_details.get('event_name'),
+                    "type": event_details.get('event_type'),
+                    "date": event_details.get('event_date'),
+                    "location": event_details.get('location_preference')
+                }
+            }
+            safe_event_name = "".join(c for c in event_details.get('event_name','event') if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+            fallback_path = os.path.join("event_outputs", f"registration_form_{safe_event_name}.json")
+            with open(fallback_path, "w", encoding="utf-8") as f:
+                f.write(_json.dumps(fallback_schema, indent=2))
+            form_data = {
+                "status": "deferred",
+                "message": "Remote form creation failed due to rate limits/connection. Local form schema generated.",
+                "local_schema_path": fallback_path
+            }
+            print(f"✅ Local form schema saved: {fallback_path}\n")
+        except Exception as _e:
+            print(f"⚠️  Failed to write local form schema: {_e}\n")
     
     # Return comprehensive results
     return {
