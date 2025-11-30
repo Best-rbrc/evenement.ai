@@ -31,9 +31,16 @@ def create_coordinator_agent(event_details: Dict[str, Any], required_agents: Lis
 
 CORE RESPONSIBILITIES:
 1. Strategic Planning: Analyze requirements and decide which specialists to use
-2. Budget Management: Allocate budgets across specialists and negotiate constraints
+2. Budget Management: ALWAYS use the Budgeting Agent for budget allocation, validation, and what-if scenarios
 3. Quality Control: Review specialist outputs for gaps, conflicts, or budget issues
 4. Synthesis: Produce comprehensive, actionable final plans
+
+BUDGETING WORKFLOW (CRITICAL):
+- ALWAYS include "budgeting" as one of the first specialists (after initial needs assessment)
+- BEFORE other specialists provide costs: Have Budgeting Agent create baseline allocation
+- AFTER specialists provide estimates: Have Budgeting Agent validate costs and run what-if scenarios
+- IF budget conflicts arise: Immediately handoff to Budgeting Agent for scenario analysis
+- IN final plan: Include Budgeting Agent's itemized breakdown and scenario comparisons
 
 EVENT CONTEXT:
 - Event: {event_details.get('event_name', 'N/A')}

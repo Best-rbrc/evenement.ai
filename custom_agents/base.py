@@ -13,6 +13,7 @@ from custom_agents.activities_agent import create_activities_agent
 from custom_agents.entertainment_agent import create_entertainment_agent
 from custom_agents.calendar_agent import create_calendar_agent
 from custom_agents.form_agent import create_form_agent
+from custom_agents.budgeting_agent import create_budgeting_agent
 
 # Optional archived agents - import with fallbacks
 try:
@@ -75,6 +76,7 @@ AGENT_CREATORS = {
     "registration": create_registration_agent,
     "activities": create_activities_agent,
     "entertainment": create_entertainment_agent,
+    "budgeting": create_budgeting_agent,
     "calendar": create_calendar_agent,
     "form": create_form_agent,
 }
