@@ -111,6 +111,16 @@ IMPORTANT GUIDELINES:
 - ALWAYS include "budgeting" agent early in the sequence (typically after venue/catering needs are identified)
 - Budgeting should run BEFORE cost-heavy agents provide estimates (so they have allocation targets)
 - OR budgeting can run AFTER specialists to validate and create what-if scenarios
+
+- WHEN TO USE "scheduling" agent (CRITICAL):
+  * USE for: conferences, workshops, summits, multi-day events, academic events
+  * USE when: Multiple sessions, speakers, or parallel tracks need coordination
+  * USE when: Multiple rooms/venues need to be scheduled without conflicts
+  * SKIP for: Simple single-session events (weddings, birthday parties, single galas)
+  * SKIP for: Events with one linear timeline (no room/speaker conflicts possible)
+  * PLACEMENT: AFTER programme, speakers, and venue agents (needs their output as input)
+  * BEFORE calendar agent (provides optimized times for calendar generation)
+
 - Be strategic and selective - don't include agents that aren't truly needed for this event type."""
 
     planning_result = Runner.run_sync(coordinator, planning_prompt)
