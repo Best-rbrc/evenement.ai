@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import asyncio
 from dotenv import load_dotenv
 from workflows.event_planning_workflow import run_event_planning
 
@@ -50,6 +51,17 @@ def collect_event_details():
 
 def main():
     check_api_key()
+    # Ensure there is an asyncio event loop for libraries that call get_event_loop()
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            # Set a default policy and loop for Python 3.13+
+            asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+        except Exception:
+            pass
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     details = collect_event_details()
     result = run_event_planning(details)
 
