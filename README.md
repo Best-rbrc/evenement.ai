@@ -107,9 +107,11 @@ AI-Event-Planner-Agent/
 │       ├── seating_agent.py
 │       └── ...
 ├── workflows/                   # Workflow orchestration logic
-│   └── event_planning_workflow.py  # Main 3-phase intelligent workflow
-└── tools/                       # Utility tools for agents
-    └── analysis_tools.py       # (Currently empty - coordinator uses handoffs)
+│   └── event_planning_workflow.py  # Main 5-phase intelligent workflow
+├── tools/                       # Utility tools for agents
+│   ├── analysis_tools.py       # (Currently empty - coordinator uses handoffs)
+│   └── report_generator.py    # Professional PDF report generation (NEW!)
+└── event_outputs/               # Generated outputs (PDFs, ICS files, etc.)
 ```
 
 ## Specialized Agents
@@ -165,6 +167,20 @@ The system uses a **3-Phase Intelligent Workflow** with a Coordinator Agent patt
 - Identifies budget conflicts, gaps, or inconsistencies
 - Can handoff to additional specialists as needed (even ones not initially called)
 - Synthesizes final comprehensive event plan
+
+#### Phase 4: Event Outputs
+- Calendar agent generates .ics invite files
+- Form agent creates registration forms
+- **PDF report generator creates professional proposal** (NEW!)
+
+#### Phase 5: Professional PDF Report
+- Generates branded PDF proposal with executive summary
+- Includes Gantt-style timeline visualization
+- Budget breakdown tables with percentages
+- Optimized schedule (if scheduling agent was used)
+- Risk assessment matrix
+- Action items checklist
+- Professional formatting with custom color scheme
 
 ### Key Components
 

@@ -441,6 +441,44 @@ Use the complete event context above to design an appropriate registration form 
     else:
         print(f"⚠️  Form creation had issues. Check output for details.\n")
     
+    # ============================================================
+    # PHASE 5: PDF REPORT GENERATION
+    # ============================================================
+    print(f"\n{'='*60}")
+    print("📄 PHASE 5: Generating Professional PDF Report")
+    print(f"{'='*60}\n")
+    
+    print("Creating comprehensive PDF proposal...\n")
+    
+    try:
+        from tools.report_generator import generate_event_proposal_pdf
+        
+        # Parse final plan if it's a string
+        final_plan_dict = final_result.final_output
+        if isinstance(final_plan_dict, str):
+            try:
+                final_plan_dict = json.loads(final_plan_dict)
+            except:
+                # If parsing fails, create a basic structure
+                final_plan_dict = {
+                    "executive_summary": final_result.final_output[:1000],
+                    "assumptions": ["Unable to parse full plan structure"]
+                }
+        
+        pdf_path = generate_event_proposal_pdf(
+            event_details=event_details,
+            final_plan=final_plan_dict,
+            specialist_outputs=specialist_outputs
+        )
+        
+        print(f"✅ PDF report generated: {pdf_path}\n")
+        pdf_generated = True
+        
+    except Exception as e:
+        print(f"⚠️  PDF generation error: {e}\n")
+        pdf_path = None
+        pdf_generated = False
+    
     # Return comprehensive results
     return {
         "event_details": event_details,
@@ -449,8 +487,10 @@ Use the complete event context above to design an appropriate registration form 
         "final_plan": final_result.final_output,
         "calendar_invite": calendar_result.final_output,
         "registration_form": form_data,
+        "pdf_report": pdf_path,
         "agents_used": required_agents + ["calendar", "form"],
-        "success": True
+        "success": True,
+        "pdf_generated": pdf_generated
     }
 
 
