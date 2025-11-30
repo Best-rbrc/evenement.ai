@@ -264,6 +264,12 @@ Your task for PHASE 3 - FINALIZATION:
    - IF budgeting agent shows over_budget scenarios: Consider their recommended scenario
    - Ensure final plan reflects budgeting agent's approved allocation
 
+2.5. SCHEDULING OPTIMIZATION REVIEW (IF SCHEDULING AGENT WAS USED):
+   - Extract and preserve scheduling metrics (total_duration, room_utilization, conflicts_resolved)
+   - Include optimized schedule in final plan under "schedule" section
+   - Highlight any scheduling conflicts that were resolved
+   - If scheduling was infeasible, document the conflicts and suggestions
+
 3. IF YOU IDENTIFY OTHER ISSUES OR GAPS:
    - You can handoff to ANY specialist agent (even ones not called yet) to:
      * Refine their recommendations with adjusted constraints
@@ -287,6 +293,17 @@ Your task for PHASE 3 - FINALIZATION:
   "timeline": [
     {{"phase": "...", "tasks": [...], "deadline": "..."}}
   ],
+  "schedule": {{
+    "optimized": true/false,
+    "sessions": [...],  // REQUIRED if scheduling agent was used
+    "metrics": {{
+      "total_duration": "...",
+      "event_ends_at": "...",
+      "room_utilization": {{}},
+      "conflicts_resolved": "..."
+    }},
+    "status": "optimal | feasible | infeasible"  // from scheduling agent output
+  }},
   "budget": {{
     "total_available": "...",
     "total_allocated": "...",

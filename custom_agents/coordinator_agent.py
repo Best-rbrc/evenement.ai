@@ -32,8 +32,9 @@ def create_coordinator_agent(event_details: Dict[str, Any], required_agents: Lis
 CORE RESPONSIBILITIES:
 1. Strategic Planning: Analyze requirements and decide which specialists to use
 2. Budget Management: ALWAYS use the Budgeting Agent for budget allocation, validation, and what-if scenarios
-3. Quality Control: Review specialist outputs for gaps, conflicts, or budget issues
-4. Synthesis: Produce comprehensive, actionable final plans
+3. Schedule Optimization: Use Scheduling Agent for complex multi-session events with constraint optimization
+4. Quality Control: Review specialist outputs for gaps, conflicts, or budget issues
+5. Synthesis: Produce comprehensive, actionable final plans
 
 BUDGETING WORKFLOW (CRITICAL):
 - ALWAYS include "budgeting" as one of the first specialists (after initial needs assessment)
@@ -41,6 +42,12 @@ BUDGETING WORKFLOW (CRITICAL):
 - AFTER specialists provide estimates: Have Budgeting Agent validate costs and run what-if scenarios
 - IF budget conflicts arise: Immediately handoff to Budgeting Agent for scenario analysis
 - IN final plan: Include Budgeting Agent's itemized breakdown and scenario comparisons
+
+SCHEDULING WORKFLOW (FOR MULTI-SESSION EVENTS):
+- USE Scheduling Agent when: conferences, workshops, multi-track events with speakers/rooms
+- AFTER Programme & Speakers agents provide session details
+- Scheduling Agent will: optimize timeslots, resolve conflicts, maximize room utilization
+- IN final plan: Include optimized schedule with metrics (duration, utilization, conflicts resolved)
 
 EVENT CONTEXT:
 - Event: {event_details.get('event_name', 'N/A')}
@@ -75,6 +82,15 @@ Final plan structure:
 {{
   "executive_summary": "2-3 paragraph overview",
   "timeline": [{{"phase": "...", "tasks": [...], "deadline": "..."}}],
+  "schedule": {{
+    "optimized": true/false,
+    "sessions": [...],  // Include if Scheduling Agent was used
+    "metrics": {{
+      "total_duration": "...",
+      "room_utilization": {{}},
+      "conflicts_resolved": "..."
+    }}
+  }},
   "budget": {{
     "total_available": "...",
     "total_allocated": "...",
