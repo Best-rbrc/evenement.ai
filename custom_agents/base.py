@@ -8,7 +8,6 @@ from custom_agents.catering_agent import create_catering_agent
 from custom_agents.speaker_agent import create_speakers_agent
 from custom_agents.programme_agent import create_programme_agent
 from custom_agents.communication_agent import create_communication_agent
-from custom_agents.registration_agent import create_registration_agent
 from custom_agents.activities_agent import create_activities_agent
 from custom_agents.entertainment_agent import create_entertainment_agent
 from custom_agents.calendar_agent import create_calendar_agent
@@ -74,7 +73,6 @@ AGENT_CREATORS = {
     "speakers": create_speakers_agent,
     "programme": create_programme_agent,
     "communication": create_communication_agent,
-    "registration": create_registration_agent,
     "activities": create_activities_agent,
     "entertainment": create_entertainment_agent,
     "budgeting": create_budgeting_agent,

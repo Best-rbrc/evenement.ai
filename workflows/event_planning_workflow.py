@@ -75,7 +75,7 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     # Create all available specialists (coordinator will decide which to use)
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
-        "communication", "registration", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"
+        "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"
     ]
     all_specialists = create_specialized_agents(all_agent_types)
     
@@ -102,7 +102,6 @@ Available specialists:
 - programme: Event schedule and session planning
 - speakers: Speaker/presenter coordination
 - communication: Marketing, invitations, attendee communications
-- registration: Registration systems and check-in
 - activities: Team-building and recreational activities
 - entertainment: Entertainment and performance coordination
 - budgeting: Budget allocation, what-if scenarios, cost validation
@@ -457,8 +456,7 @@ Output JSON with:
         minimal_context["venue"] = "include venue/address field if available"
     if "catering" in specialist_outputs:
         minimal_context["catering"] = "collect dietary restrictions"
-    if "registration" in specialist_outputs:
-        minimal_context["registration"] = "ensure attendance and contact fields"
+    # Registration form will be auto-generated in Phase 4
     if "programme" in specialist_outputs:
         minimal_context["programme"] = "optional session preferences"
 
