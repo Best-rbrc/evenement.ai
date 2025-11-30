@@ -14,6 +14,7 @@ from custom_agents.entertainment_agent import create_entertainment_agent
 from custom_agents.calendar_agent import create_calendar_agent
 from custom_agents.form_agent import create_form_agent
 from custom_agents.budgeting_agent import create_budgeting_agent
+from custom_agents.scheduling_agent import create_scheduling_agent
 
 # Optional archived agents - import with fallbacks
 try:
@@ -79,6 +80,7 @@ AGENT_CREATORS = {
     "budgeting": create_budgeting_agent,
     "calendar": create_calendar_agent,
     "form": create_form_agent,
+    "scheduling": create_scheduling_agent,
 }
 
 # Add optional archived agents only if they were successfully imported

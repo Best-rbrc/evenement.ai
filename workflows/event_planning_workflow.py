@@ -64,7 +64,7 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     # Create all available specialists (coordinator will decide which to use)
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
-        "communication", "registration", "activities", "entertainment", "budgeting", "calendar", "form"
+        "communication", "registration", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"
     ]
     all_specialists = create_specialized_agents(all_agent_types)
     
@@ -95,6 +95,7 @@ Available specialists:
 - activities: Team-building and recreational activities
 - entertainment: Entertainment and performance coordination
 - budgeting: Budget allocation, what-if scenarios, cost validation
+- scheduling: Advanced constraint-based schedule optimization (resolves conflicts, optimizes room/speaker assignments)
 - calendar: Calendar invites and ICS file generation
 - form: Online registration/RSVP form creation (auto-generated in Phase 4)
 
@@ -169,9 +170,38 @@ Your task:
 {"" if not specialist_outputs else "5. Use compare_budget_scenarios() to recommend best approach"}
 {"" if not specialist_outputs else "6. Provide itemized breakdown using generate_cost_breakdown() for major categories"}
 
-Required categories for this event: {', '.join([a for a in required_agents if a != 'budgeting' and a not in ['calendar', 'form']])}
+Required categories for this event: {', '.join([a for a in required_agents if a != 'budgeting' and a not in ['calendar', 'form', 'scheduling']])}
 
 Output comprehensive JSON with budget allocation, scenarios (if applicable), and recommendations."""
+        elif agent_name == "scheduling":
+            # Special handling for scheduling agent
+            specialist_prompt = f"""You are the Advanced Scheduling specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
+
+{get_current_date_context()}
+
+Event Details:
+{json.dumps(event_details, indent=2)}{context}
+
+Your task:
+1. Extract all sessions/activities from programme and speakers outputs
+2. Identify available rooms from venue output
+3. Determine speaker availability and travel time requirements
+4. Define constraints (event hours, lunch breaks, capacity requirements)
+5. Use optimize_schedule() to create optimal schedule that:
+   - Avoids all conflicts (rooms, speakers, capacity)
+   - Respects break times
+   - Minimizes total duration
+   - Maximizes room utilization
+
+Input format for optimize_schedule:
+- sessions: [{{"id": 1, "name": "Session Name", "duration": 60, "speaker": "Speaker Name", "expected_attendees": 100}}]
+- rooms: [{{"id": 1, "name": "Room Name", "capacity": 150, "equipment": ["projector"]}}]
+- speakers: [{{"id": "Speaker Name", "travel_time_minutes": 30}}]
+- constraints: {{"event_start": "09:00", "event_end": "18:00", "lunch_break": "12:00-13:00"}}
+
+If scheduling is infeasible, explain conflicts and provide actionable suggestions.
+
+Output comprehensive JSON with optimized schedule, metrics, and any conflict resolutions."""
         else:
             # Add budget context if budgeting agent has run
             budget_context = ""

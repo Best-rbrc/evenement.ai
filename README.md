@@ -126,7 +126,8 @@ The system includes **8 core specialized agents** and several optional archived 
 - **Registration Agent**: Registration systems, check-in logistics, ticketing
 - **Activities Agent**: Team-building activities, recreational planning
 - **Entertainment Agent**: Entertainment booking, coordination, technical requirements
-- **Budgeting Agent**: Budget allocation, what-if scenario analysis, cost validation (NEW!)
+- **Budgeting Agent**: Budget allocation, what-if scenario analysis, cost validation
+- **Scheduling Agent**: Advanced constraint-based schedule optimization using Google OR-Tools (NEW!)
 
 ### Optional/Archived Agents
 
@@ -241,11 +242,62 @@ Example workflow:
 5. If over budget, Budgeting Agent proposes alternative scenarios
 6. Coordinator selects best scenario for final plan
 
+### Scheduling Agent - Advanced Constraint Optimization
+
+The **Scheduling Agent** uses **Google OR-Tools** constraint programming to optimize complex event schedules:
+
+#### Core Capabilities
+
+1. **Constraint-Based Optimization** (`optimize_schedule`)
+   - **No room conflicts**: Prevents double-booking of rooms
+   - **No speaker conflicts**: Ensures speakers aren't scheduled in two places at once
+   - **Capacity matching**: Assigns sessions to rooms with adequate capacity
+   - **Travel time buffers**: Adds time between sessions for speaker movement
+   - **Break enforcement**: Respects lunch breaks and mandatory pauses
+   - **Compact scheduling**: Minimizes total event duration
+
+2. **Conflict Detection & Resolution**
+   - Identifies infeasible schedules and explains why
+   - Provides actionable suggestions (add rooms, reduce sessions, extend hours)
+   - Scores schedules by feasibility and efficiency
+
+3. **What-If Analysis** (`analyze_schedule_conflicts`)
+   - Test adding new sessions without making changes
+   - Detect conflicts before committing
+   - Get recommendations for resolution
+
+4. **Optimization Objectives**
+   - Minimize total event duration (compact schedule)
+   - Maximize room utilization
+   - Balance session distribution
+   - Respect speaker preferences
+
+#### Integration in Workflow
+
+The Scheduling Agent runs after Programme and Speakers agents:
+1. Extracts sessions from Programme Agent output
+2. Identifies rooms from Venue Agent output
+3. Determines speaker availability and travel requirements
+4. Applies constraints (event hours, breaks, capacity)
+5. Uses CP-SAT solver to find optimal schedule
+6. Returns optimized schedule with metrics or conflict explanations
+
+Example input:
+```json
+{
+  "sessions": [{"id": 1, "name": "Keynote", "duration": 60, "speaker": "Dr. Weber", "expected_attendees": 100}],
+  "rooms": [{"id": 1, "name": "Main Hall", "capacity": 200}],
+  "speakers": [{"id": "Dr. Weber", "travel_time_minutes": 30}],
+  "constraints": {"event_start": "09:00", "event_end": "18:00", "lunch_break": "12:00-13:00"}
+}
+```
+
 ### Why the Coordinator Agent?
 
 The Coordinator Agent is essential because it:
 - Makes strategic decisions (which agents, what order)
 - Orchestrates budget management via Budgeting Agent
+- Coordinates constraint optimization via Scheduling Agent
 - Reviews and synthesizes all specialist outputs
 - Handles iterative refinement (can call agents multiple times)
 - Produces a coherent final plan from distributed specialist work
