@@ -96,6 +96,7 @@ AI-Event-Planner-Agent/
 │   ├── programme_agent.py      # Event scheduling & session planning
 │   ├── communication_agent.py  # Marketing & invitations
 │   ├── registration_agent.py   # Registration systems & check-in
+│   ├── budgeting_agent.py     # Budget allocation & what-if scenarios
 │   ├── form_agent.py          # Tally form creation (MCP integration)
 │   ├── activities_agent.py     # Recreational activities planning
 │   ├── entertainment_agent.py  # Entertainment booking & coordination
@@ -125,6 +126,7 @@ The system includes **8 core specialized agents** and several optional archived 
 - **Registration Agent**: Registration systems, check-in logistics, ticketing
 - **Activities Agent**: Team-building activities, recreational planning
 - **Entertainment Agent**: Entertainment booking, coordination, technical requirements
+- **Budgeting Agent**: Budget allocation, what-if scenario analysis, cost validation (NEW!)
 
 ### Optional/Archived Agents
 
@@ -188,11 +190,62 @@ The system uses a **3-Phase Intelligent Workflow** with a Coordinator Agent patt
    - Specialists work with context from prior specialists
    - Enables iterative refinement and dynamic planning
 
+### Budgeting Agent - What-If Scenario Planning
+
+The **Budgeting Agent** is a specialized agent that provides comprehensive financial planning and analysis:
+
+#### Core Capabilities
+
+1. **Budget Allocation** (`calculate_budget_allocation`)
+   - Distributes total budget across event categories
+   - Uses priority-based allocation (high/medium/low)
+   - Industry-standard percentage guidelines by category
+   - Automatic contingency fund (10-15%)
+
+2. **What-If Scenario Analysis** (`run_budget_scenario`)
+   - Model impacts of budget changes before committing
+   - Compare "what if we increase venue budget by $2000?" scenarios
+   - Identify feasibility issues (over_budget, under_budget, feasible)
+   - Provide clear recommendations for each scenario
+
+3. **Multi-Scenario Comparison** (`compare_budget_scenarios`)
+   - Evaluate multiple scenarios side-by-side
+   - Score scenarios based on feasibility and contingency
+   - Recommend optimal approach with reasoning
+
+4. **Cost Validation** (`validate_category_costs`)
+   - Check proposed costs against industry benchmarks
+   - Per-person validation for scalable costs (venue, catering)
+   - Per-event validation for fixed costs (speakers, photography)
+   - Flag costs that are too high or suspiciously low
+
+5. **Itemized Breakdowns** (`generate_cost_breakdown`)
+   - Detailed line-item breakdowns by category
+   - Venue: rental, setup, equipment, permits
+   - Catering: food, beverages, staff, equipment
+   - Speakers: honorarium, travel, accommodation
+
+#### Integration in Workflow
+
+The Budgeting Agent integrates seamlessly:
+- **Early execution**: Creates baseline allocation before specialists provide estimates
+- **Post-specialist validation**: Validates all specialist costs and runs scenarios
+- **Conflict resolution**: When budget issues arise, automatically creates what-if scenarios
+- **Final approval**: Ensures final plan meets budget constraints
+
+Example workflow:
+1. Coordinator selects required specialists
+2. Budgeting Agent creates baseline allocation
+3. Other specialists (venue, catering, etc.) provide recommendations within budget
+4. Budgeting Agent validates all costs and runs what-if scenarios
+5. If over budget, Budgeting Agent proposes alternative scenarios
+6. Coordinator selects best scenario for final plan
+
 ### Why the Coordinator Agent?
 
 The Coordinator Agent is essential because it:
 - Makes strategic decisions (which agents, what order)
-- Centralizes budget management and negotiation
+- Orchestrates budget management via Budgeting Agent
 - Reviews and synthesizes all specialist outputs
 - Handles iterative refinement (can call agents multiple times)
 - Produces a coherent final plan from distributed specialist work

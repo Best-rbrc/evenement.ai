@@ -64,7 +64,7 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     # Create all available specialists (coordinator will decide which to use)
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
-        "communication", "registration", "activities", "entertainment", "calendar", "form"
+        "communication", "registration", "activities", "entertainment", "budgeting", "calendar", "form"
     ]
     all_specialists = create_specialized_agents(all_agent_types)
     
@@ -94,6 +94,7 @@ Available specialists:
 - registration: Registration systems and check-in
 - activities: Team-building and recreational activities
 - entertainment: Entertainment and performance coordination
+- budgeting: Budget allocation, what-if scenarios, cost validation
 - calendar: Calendar invites and ICS file generation
 - form: Online registration/RSVP form creation (auto-generated in Phase 4)
 
@@ -105,7 +106,11 @@ Output your plan as JSON:
   "special_considerations": ["consideration1", "consideration2", ...]
 }}
 
-Be strategic and selective - don't include agents that aren't truly needed for this event type."""
+IMPORTANT GUIDELINES:
+- ALWAYS include "budgeting" agent early in the sequence (typically after venue/catering needs are identified)
+- Budgeting should run BEFORE cost-heavy agents provide estimates (so they have allocation targets)
+- OR budgeting can run AFTER specialists to validate and create what-if scenarios
+- Be strategic and selective - don't include agents that aren't truly needed for this event type."""
 
     planning_result = Runner.run_sync(coordinator, planning_prompt)
     
@@ -145,12 +150,40 @@ Be strategic and selective - don't include agents that aren't truly needed for t
         if specialist_outputs:
             context = f"\n\nPrevious specialist outputs for context:\n{json.dumps(specialist_outputs, indent=2)}"
         
-        specialist_prompt = f"""You are the {agent_name} specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
+        # Special handling for budgeting agent
+        if agent_name == "budgeting":
+            specialist_prompt = f"""You are the Budgeting specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
 
 {get_current_date_context()}
 
 Event Details:
 {json.dumps(event_details, indent=2)}{context}
+
+Your task:
+{"INITIAL BUDGET ALLOCATION:" if not specialist_outputs else "BUDGET VALIDATION AND WHAT-IF SCENARIOS:"}
+
+{"1. Create baseline budget allocation across all required categories using calculate_budget_allocation()" if not specialist_outputs else "1. Review all specialist cost estimates"}
+{"2. Set priorities based on event type (e.g., venue and catering typically high priority)" if not specialist_outputs else "2. Validate each category cost using validate_category_costs()"}
+{"3. Ensure 10-15% contingency fund" if not specialist_outputs else "3. Check if total costs fit within available budget"}
+{"4. Provide per-category allocations with rationale" if not specialist_outputs else "4. If over budget, run 2-3 what-if scenarios using run_budget_scenario() to find solutions"}
+{"" if not specialist_outputs else "5. Use compare_budget_scenarios() to recommend best approach"}
+{"" if not specialist_outputs else "6. Provide itemized breakdown using generate_cost_breakdown() for major categories"}
+
+Required categories for this event: {', '.join([a for a in required_agents if a != 'budgeting' and a not in ['calendar', 'form']])}
+
+Output comprehensive JSON with budget allocation, scenarios (if applicable), and recommendations."""
+        else:
+            # Add budget context if budgeting agent has run
+            budget_context = ""
+            if "budgeting" in specialist_outputs:
+                budget_context = f"\n\nBUDGET CONSTRAINTS from Budgeting Specialist:\n{specialist_outputs['budgeting']}\n\nPlease ensure your recommendations fit within your allocated budget."
+            
+            specialist_prompt = f"""You are the {agent_name} specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
+
+{get_current_date_context()}
+
+Event Details:
+{json.dumps(event_details, indent=2)}{context}{budget_context}
 
 Your task:
 Provide detailed, actionable recommendations for {agent_name}, including:
@@ -191,12 +224,17 @@ All Specialist Outputs:
 Your task for PHASE 3 - FINALIZATION:
 
 1. REVIEW all specialist outputs for:
-   - Budget conflicts (total cost vs available budget)
+   - Budget conflicts (total cost vs available budget) - IF BUDGETING AGENT RAN: Check their scenario analysis
    - Logical inconsistencies (e.g., venue capacity vs guest count)
    - Missing critical information
    - Interdependencies and conflicts
 
-2. IF YOU IDENTIFY ISSUES OR GAPS:
+2. BUDGET VALIDATION (CRITICAL):
+   - IF budgeting agent was NOT used yet: Handoff to budgeting agent NOW to validate all costs
+   - IF budgeting agent shows over_budget scenarios: Consider their recommended scenario
+   - Ensure final plan reflects budgeting agent's approved allocation
+
+3. IF YOU IDENTIFY OTHER ISSUES OR GAPS:
    - You can handoff to ANY specialist agent (even ones not called yet) to:
      * Refine their recommendations with adjusted constraints
      * Fill in missing information
