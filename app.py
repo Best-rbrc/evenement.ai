@@ -68,13 +68,39 @@ def main():
     print("\n" + "="*60)
     print(f"📋 EVENT PLANNING RESULTS — {details.get('event_name','(unnamed)')}")
     print("="*60)
+    
     if isinstance(result, dict):
+        # Print summary of outputs
+        print(f"\n✅ Planning completed successfully!")
+        print(f"\n📁 Generated Outputs:")
+        
+        if result.get('pdf_generated') and result.get('pdf_report'):
+            print(f"   📄 PDF Report: {result['pdf_report']}")
+        
+        # Try to parse calendar output for ICS file path
+        try:
+            calendar_data = json.loads(result.get('calendar_invite', '{}'))
+            if 'calendar_file_path' in calendar_data:
+                print(f"   📅 Calendar File: {calendar_data['calendar_file_path']}")
+        except:
+            pass
+        
+        if result.get('registration_form', {}).get('status') == 'success':
+            print(f"   📝 Registration Form: {result['registration_form'].get('form_url', 'N/A')}")
+        
+        print(f"\n📊 Agents Used: {', '.join(result.get('agents_used', []))}")
+        
+        # Print full result as JSON (can be saved to file)
+        print(f"\n{'='*60}")
+        print("FULL RESULTS (JSON):")
+        print("="*60)
         print(json.dumps(result, indent=2))
     else:
         try:
             print(result.final_output)
         except Exception:
             print(result)
+    
     print("="*60)
 
 if __name__ == "__main__":

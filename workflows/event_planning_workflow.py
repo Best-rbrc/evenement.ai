@@ -75,7 +75,7 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     # Create all available specialists (coordinator will decide which to use)
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
-        "communication", "registration", "activities", "entertainment", "calendar", "form"
+        "communication", "registration", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"
     ]
     all_specialists = create_specialized_agents(all_agent_types)
     
@@ -105,6 +105,8 @@ Available specialists:
 - registration: Registration systems and check-in
 - activities: Team-building and recreational activities
 - entertainment: Entertainment and performance coordination
+- budgeting: Budget allocation, what-if scenarios, cost validation
+- scheduling: Advanced constraint-based schedule optimization (resolves conflicts, optimizes room/speaker assignments)
 - calendar: Calendar invites and ICS file generation
 - form: Online registration/RSVP form creation (auto-generated in Phase 4)
 
@@ -116,7 +118,21 @@ Output your plan as JSON:
   "special_considerations": ["consideration1", "consideration2", ...]
 }}
 
-Be strategic and selective - don't include agents that aren't truly needed for this event type."""
+IMPORTANT GUIDELINES:
+- ALWAYS include "budgeting" agent early in the sequence (typically after venue/catering needs are identified)
+- Budgeting should run BEFORE cost-heavy agents provide estimates (so they have allocation targets)
+- OR budgeting can run AFTER specialists to validate and create what-if scenarios
+
+- WHEN TO USE "scheduling" agent (CRITICAL):
+  * USE for: conferences, workshops, summits, multi-day events, academic events
+  * USE when: Multiple sessions, speakers, or parallel tracks need coordination
+  * USE when: Multiple rooms/venues need to be scheduled without conflicts
+  * SKIP for: Simple single-session events (weddings, birthday parties, single galas)
+  * SKIP for: Events with one linear timeline (no room/speaker conflicts possible)
+  * PLACEMENT: AFTER programme, speakers, and venue agents (needs their output as input)
+  * BEFORE calendar agent (provides optimized times for calendar generation)
+
+- Be strategic and selective - don't include agents that aren't truly needed for this event type."""
 
     # Run coordinator planning with rate-limit aware retries
     _ensure_loop()
@@ -185,12 +201,69 @@ Be strategic and selective - don't include agents that aren't truly needed for t
         if specialist_outputs:
             context = f"\n\nPrevious specialist outputs for context:\n{json.dumps(specialist_outputs, indent=2)}"
         
-        specialist_prompt = f"""You are the {agent_name} specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
+        # Special handling for budgeting agent
+        if agent_name == "budgeting":
+            specialist_prompt = f"""You are the Budgeting specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
 
 {get_current_date_context()}
 
 Event Details:
 {json.dumps(event_details, indent=2)}{context}
+
+Your task:
+{"INITIAL BUDGET ALLOCATION:" if not specialist_outputs else "BUDGET VALIDATION AND WHAT-IF SCENARIOS:"}
+
+{"1. Create baseline budget allocation across all required categories using calculate_budget_allocation()" if not specialist_outputs else "1. Review all specialist cost estimates"}
+{"2. Set priorities based on event type (e.g., venue and catering typically high priority)" if not specialist_outputs else "2. Validate each category cost using validate_category_costs()"}
+{"3. Ensure 10-15% contingency fund" if not specialist_outputs else "3. Check if total costs fit within available budget"}
+{"4. Provide per-category allocations with rationale" if not specialist_outputs else "4. If over budget, run 2-3 what-if scenarios using run_budget_scenario() to find solutions"}
+{"" if not specialist_outputs else "5. Use compare_budget_scenarios() to recommend best approach"}
+{"" if not specialist_outputs else "6. Provide itemized breakdown using generate_cost_breakdown() for major categories"}
+
+Required categories for this event: {', '.join([a for a in required_agents if a != 'budgeting' and a not in ['calendar', 'form', 'scheduling']])}
+
+Output comprehensive JSON with budget allocation, scenarios (if applicable), and recommendations."""
+        elif agent_name == "scheduling":
+            # Special handling for scheduling agent
+            specialist_prompt = f"""You are the Advanced Scheduling specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
+
+{get_current_date_context()}
+
+Event Details:
+{json.dumps(event_details, indent=2)}{context}
+
+Your task:
+1. Extract all sessions/activities from programme and speakers outputs
+2. Identify available rooms from venue output
+3. Determine speaker availability and travel time requirements
+4. Define constraints (event hours, lunch breaks, capacity requirements)
+5. Use optimize_schedule() to create optimal schedule that:
+   - Avoids all conflicts (rooms, speakers, capacity)
+   - Respects break times
+   - Minimizes total duration
+   - Maximizes room utilization
+
+Input format for optimize_schedule:
+- sessions: [{{"id": 1, "name": "Session Name", "duration": 60, "speaker": "Speaker Name", "expected_attendees": 100}}]
+- rooms: [{{"id": 1, "name": "Room Name", "capacity": 150, "equipment": ["projector"]}}]
+- speakers: [{{"id": "Speaker Name", "travel_time_minutes": 30}}]
+- constraints: {{"event_start": "09:00", "event_end": "18:00", "lunch_break": "12:00-13:00"}}
+
+If scheduling is infeasible, explain conflicts and provide actionable suggestions.
+
+Output comprehensive JSON with optimized schedule, metrics, and any conflict resolutions."""
+        else:
+            # Add budget context if budgeting agent has run
+            budget_context = ""
+            if "budgeting" in specialist_outputs:
+                budget_context = f"\n\nBUDGET CONSTRAINTS from Budgeting Specialist:\n{specialist_outputs['budgeting']}\n\nPlease ensure your recommendations fit within your allocated budget."
+            
+            specialist_prompt = f"""You are the {agent_name} specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
+
+{get_current_date_context()}
+
+Event Details:
+{json.dumps(event_details, indent=2)}{context}{budget_context}
 
 Your task:
 Provide detailed, actionable recommendations for {agent_name}, including:
@@ -232,12 +305,23 @@ All Specialist Outputs:
 Your task for PHASE 3 - FINALIZATION:
 
 1. REVIEW all specialist outputs for:
-   - Budget conflicts (total cost vs available budget)
+   - Budget conflicts (total cost vs available budget) - IF BUDGETING AGENT RAN: Check their scenario analysis
    - Logical inconsistencies (e.g., venue capacity vs guest count)
    - Missing critical information
    - Interdependencies and conflicts
 
-2. IF YOU IDENTIFY ISSUES OR GAPS:
+2. BUDGET VALIDATION (CRITICAL):
+   - IF budgeting agent was NOT used yet: Handoff to budgeting agent NOW to validate all costs
+   - IF budgeting agent shows over_budget scenarios: Consider their recommended scenario
+   - Ensure final plan reflects budgeting agent's approved allocation
+
+2.5. SCHEDULING OPTIMIZATION REVIEW (IF SCHEDULING AGENT WAS USED):
+   - Extract and preserve scheduling metrics (total_duration, room_utilization, conflicts_resolved)
+   - Include optimized schedule in final plan under "schedule" section
+   - Highlight any scheduling conflicts that were resolved
+   - If scheduling was infeasible, document the conflicts and suggestions
+
+3. IF YOU IDENTIFY OTHER ISSUES OR GAPS:
    - You can handoff to ANY specialist agent (even ones not called yet) to:
      * Refine their recommendations with adjusted constraints
      * Fill in missing information
@@ -260,6 +344,17 @@ Your task for PHASE 3 - FINALIZATION:
   "timeline": [
     {{"phase": "...", "tasks": [...], "deadline": "..."}}
   ],
+  "schedule": {{
+    "optimized": true/false,
+    "sessions": [...],  // REQUIRED if scheduling agent was used
+    "metrics": {{
+      "total_duration": "...",
+      "event_ends_at": "...",
+      "room_utilization": {{}},
+      "conflicts_resolved": "..."
+    }},
+    "status": "optimal | feasible | infeasible"  // from scheduling agent output
+  }},
   "budget": {{
     "total_available": "...",
     "total_allocated": "...",
@@ -509,6 +604,44 @@ Output JSON with:
         except Exception as _e:
             print(f"⚠️  Failed to write local form schema: {_e}\n")
     
+    # ============================================================
+    # PHASE 5: PDF REPORT GENERATION
+    # ============================================================
+    print(f"\n{'='*60}")
+    print("📄 PHASE 5: Generating Professional PDF Report")
+    print(f"{'='*60}\n")
+    
+    print("Creating comprehensive PDF proposal...\n")
+    
+    try:
+        from tools.report_generator import generate_event_proposal_pdf
+        
+        # Parse final plan if it's a string
+        final_plan_dict = final_result.final_output
+        if isinstance(final_plan_dict, str):
+            try:
+                final_plan_dict = json.loads(final_plan_dict)
+            except:
+                # If parsing fails, create a basic structure
+                final_plan_dict = {
+                    "executive_summary": final_result.final_output[:1000],
+                    "assumptions": ["Unable to parse full plan structure"]
+                }
+        
+        pdf_path = generate_event_proposal_pdf(
+            event_details=event_details,
+            final_plan=final_plan_dict,
+            specialist_outputs=specialist_outputs
+        )
+        
+        print(f"✅ PDF report generated: {pdf_path}\n")
+        pdf_generated = True
+        
+    except Exception as e:
+        print(f"⚠️  PDF generation error: {e}\n")
+        pdf_path = None
+        pdf_generated = False
+    
     # Return comprehensive results
     return {
         "event_details": event_details,
@@ -517,8 +650,10 @@ Output JSON with:
         "final_plan": final_result.final_output,
         "calendar_invite": calendar_result.final_output,
         "registration_form": form_data,
+        "pdf_report": pdf_path,
         "agents_used": required_agents + ["calendar", "form"],
-        "success": True
+        "success": True,
+        "pdf_generated": pdf_generated
     }
 
 
