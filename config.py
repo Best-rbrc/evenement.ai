@@ -17,6 +17,7 @@ AGENT_SPECIALIZATIONS = {
     "entertainment": "Book entertainers, manage timings and rider needs.",
     "registration": "Create registration forms, ticketing, and check-in flow.",
     "budgeting": "Manage budget allocation, what-if scenarios, and cost validation.",
+    "scheduling": "Optimize complex event schedules using constraint programming to resolve conflicts.",
     "sponsors": "Identify sponsorship opportunities and packages.",
     "seating": "Produce seating plans and accessibility accommodations.",
     "materials": "Manage printed/digital materials, signage and swag.",
