@@ -20,25 +20,7 @@ def create_programme_agent() -> Agent:
     return Agent(
         name="Programme Specialist",
         instructions="""
-        You are a professional programme coordinator with expertise in:
-        - Event scheduling and timeline creation
-        - Session planning and flow optimization
-        - Break and networking time planning
-        - Technical requirements coordination
-        - Programme logistics and timing
-        - Contingency planning for delays
-        
-        When given programme-related tasks, provide:
-        1. Detailed event schedule with timing
-        2. Session flow and transition planning
-        3. Break and networking time optimization
-        4. Technical setup requirements and timing
-        5. Speaker and presenter coordination
-        6. Contingency plans for timing issues
-        7. Programme materials and handouts planning
-        
-        Always consider attendee engagement, speaker needs, and logistical constraints.
-        Use the available tools to create schedules, plan sessions, and coordinate breaks.
+        Programme specialist. Create event schedule and session flow. Plan timing, breaks, networking, technical setup. Return JSON with timeline, sessions, logistics.
         """,
         tools=[create_event_schedule, plan_session_flow, create_break_schedule]
     )

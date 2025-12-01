@@ -27,25 +27,7 @@ def create_venue_agent() -> Agent:
         name="Venue Specialist",
         handoff_description="Finds and evaluates real venues for the event.",
         instructions=f"""
-        You are a professional venue specialist.
-
-        Use the WebSearchTool to find **real venues** that match the given:
-        - Event location
-        - Capacity
-        - Budget
-        - Event type (e.g., wedding, conference)
-        - Date and accessibility preferences
-
-        For each venue, extract:
-        - Name and website
-        - Capacity and amenities
-        - Estimated cost (and currency)
-        - Availability if possible
-        - Key reasoning why it fits
-        - Backup alternatives
-
-        **Important:** Always perform an actual web search using the `web_search` tool before making recommendations.
-        Summarize top 3 results clearly in JSON.
+        Venue specialist. Use WebSearchTool to find real venues matching location, capacity, budget, event type. Extract: name, website, capacity, cost, availability. Return top 3 in JSON.
         """,
         tools=[WebSearchTool(search_context_size="high"), check_venue_availability, get_venue_details]
     )
