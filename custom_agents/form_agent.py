@@ -14,8 +14,10 @@ def create_form_agent() -> Agent:
     Returns:
         Agent configured to create event registration forms using Tally MCP tools
     """
+    # Resolve cross-platform npx command (Windows uses npx.cmd)
+    npx_command = "npx.cmd" if os.name == "nt" else "npx"
     tally_server = MCPServerStdio({
-        "command": "npx",
+        "command": npx_command,
         "args": [
             "mcp-remote",
             TALLY_MCP_URL,
@@ -23,6 +25,35 @@ def create_form_agent() -> Agent:
             f"Authorization: Bearer {os.getenv('TALLY_API_KEY', '')}",
         ],
     })
+
+    # Safely connect proactively to avoid "Server not initialized" at first use.
+    # Works with Python 3.13 where no default loop exists unless we create one.
+    try:
+        if hasattr(tally_server, "connect_sync"):
+            tally_server.connect_sync()
+        elif hasattr(tally_server, "connect"):
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            # Only run if the loop is not running
+            if not loop.is_running():
+                loop.run_until_complete(tally_server.connect())
+            else:
+                # If already running, best effort: schedule and wait briefly
+                async def _do_connect():
+                    try:
+                        await tally_server.connect()
+                    except Exception:
+                        pass
+                asyncio.create_task(_do_connect())
+    except Exception as _e:
+        # Emit debug info if requested instead of silently swallowing
+        if os.getenv("TALLY_DEBUG"):
+            print(f"[TALLY_DEBUG] Initial MCP connect failed: {_e}")
+        # Allow runtime to retry later
 
     # Configure model with rate limit friendly settings
     model_settings = ModelSettings(

@@ -469,15 +469,29 @@ Output JSON with:
 
     # Helper: run the form step with a dedicated MCP stdio context (mirrors your working script)
     async def _run_form_once(prompt: str):
-        import os
-        import re
+        import os, re, shutil, platform
         import json as _json
         from agents import Agent as _Agent, Runner as _Runner
         from agents.mcp import MCPServerStdio as _MCPServerStdio
         from agents.model_settings import ModelSettings as _ModelSettings
 
+        # Early disable: allow skipping remote form creation entirely
+        if os.getenv("DISABLE_TALLY"):
+            if os.getenv("TALLY_DEBUG"):
+                print("[TALLY_DEBUG] DISABLE_TALLY set – skipping remote MCP form creation.")
+            return type('obj', (object,), {'final_output': '{"status": "disabled", "message": "Remote Tally disabled via DISABLE_TALLY"}'})()
+
+        # Resolve npx command cross-platform
+        npx_cmd = "npx.cmd" if os.name == "nt" else "npx"
+        resolved_npx_path = shutil.which(npx_cmd) or shutil.which("npx")
+        if os.getenv("TALLY_DEBUG"):
+            print(f"[TALLY_DEBUG] Platform: {platform.system()} npx_cmd chosen: {npx_cmd}")
+            print(f"[TALLY_DEBUG] Resolved npx path: {resolved_npx_path}")
+            if not resolved_npx_path:
+                print("[TALLY_DEBUG] WARNING: npx not found in PATH – MCP connection likely to fail.")
+
         tally = _MCPServerStdio({
-            "command": "npx",
+            "command": npx_cmd,
             "args": [
                 "mcp-remote",
                 "https://api.tally.so/mcp",
@@ -485,7 +499,13 @@ Output JSON with:
             ],
         })
 
-        model_settings = _ModelSettings(max_tokens=4000, temperature=0.7)
+        # Slightly lower max_tokens here to ease rate pressure; can tune via FORM_MAX_TOKENS env
+        try:
+            form_max_tokens = int(os.getenv("FORM_MAX_TOKENS", "3000"))
+        except ValueError:
+            form_max_tokens = 3000
+        temperature = float(os.getenv("FORM_TEMPERATURE", "0.7"))
+        model_settings = _ModelSettings(max_tokens=form_max_tokens, temperature=temperature)
 
         agent = _Agent(
             name="Tally Form Agent",
@@ -500,16 +520,20 @@ Output JSON with:
         )
 
         # Allow overriding the model used for this step via env FORM_MODEL
-        # If supported by the SDK, it will read the OPENAI_MODEL env var.
         prev_model = os.environ.get("OPENAI_MODEL")
         form_model = os.environ.get("FORM_MODEL")
         if form_model:
             os.environ["OPENAI_MODEL"] = form_model
+            if os.getenv("TALLY_DEBUG"):
+                print(f"[TALLY_DEBUG] FORM_MODEL override active: {form_model}")
         try:
             async with tally:
+                if os.getenv("TALLY_DEBUG"):
+                    print("[TALLY_DEBUG] Starting MCP stdio context for Tally...")
                 result = await _Runner.run(agent, prompt)
+                if os.getenv("TALLY_DEBUG"):
+                    print("[TALLY_DEBUG] MCP run completed.")
         finally:
-            # Restore previous model env to avoid side effects on other steps
             if form_model is not None:
                 if prev_model is None:
                     os.environ.pop("OPENAI_MODEL", None)
