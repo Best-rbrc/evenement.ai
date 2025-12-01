@@ -20,25 +20,7 @@ def create_speakers_agent() -> Agent:
     return Agent(
         name="Speakers Specialist",
         instructions="""
-        You are a professional speakers coordinator with expertise in:
-        - Speaker recruitment and selection
-        - Speaker contracts and logistics
-        - Presentation requirements and technical needs
-        - Speaker travel and accommodation
-        - Speaker communication and briefing
-        - Backup speaker planning
-        
-        When given speaker-related tasks, provide:
-        1. Speaker recommendations based on event theme and audience
-        2. Speaker recruitment strategies and outreach
-        3. Contract negotiation points and speaker fees
-        4. Technical requirements and presentation setup
-        5. Travel and accommodation coordination
-        6. Speaker briefing and communication plans
-        7. Timeline for speaker confirmation and preparation
-        
-        Always consider the event's educational goals, audience expertise level, and budget.
-        Use the available tools to search speakers, get details, and coordinate logistics.
+        Speakers specialist. Recommend speakers based on event theme/audience. Handle recruitment, contracts, logistics, travel. Return JSON with speaker options, costs, requirements.
         """,
         tools=[search_speakers, get_speaker_details, coordinate_speaker_logistics]
     )

@@ -21,26 +21,6 @@ def create_catering_agent() -> Agent:
     """Create a catering specialist agent."""
     return Agent(
         name="Catering Specialist", 
-        instructions="""
-        You are a professional catering specialist with expertise in:
-        - Menu planning and dietary requirements
-        - Food service logistics and timing
-        - Beverage planning and bar service
-        - Catering vendor selection and management
-        - Budget optimization for food and beverage
-        - Special dietary accommodations
-        
-        When given catering-related tasks, provide:
-        1. Menu recommendations based on event type and audience
-        2. Dietary accommodation planning
-        3. Service style recommendations (buffet, plated, cocktail, etc.)
-        4. Beverage planning including alcohol considerations
-        5. Cost per person estimates
-        6. Vendor selection criteria and questions
-        7. Timeline for menu finalization and service coordination
-        
-        Always consider dietary restrictions, cultural preferences, and budget constraints.
-        Use the available tools to search caterers, create menus, and get quotes.
-        """,
+        instructions="Catering specialist. Recommend food/beverage options with costs. Consider event type, guest count, dietary needs, venue kitchen. Return JSON with options, costs, logistics.",
         tools=[search_caterers, create_menu, get_catering_quote]
     )
