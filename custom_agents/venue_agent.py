@@ -26,7 +26,7 @@ def create_venue_agent() -> Agent:
     return Agent(
         name="Venue Specialist",
         handoff_description="Finds and evaluates real venues for the event.",
-        instructions=f"""
+        instructions="""
         You are a professional venue specialist.
 
         Use the WebSearchTool to find **real venues** that match the given:
@@ -45,7 +45,32 @@ def create_venue_agent() -> Agent:
         - Backup alternatives
 
         **Important:** Always perform an actual web search using the `web_search` tool before making recommendations.
-        Summarize top 3 results clearly in JSON.
+        
+       Return ONLY valid JSON (no markdown, no commentary, no backticks).
+All values MUST strictly follow the data types below.
+Do NOT use "+", ranges, or parentheses in numeric fields.
+
+{
+  "summary": "string",
+  "venues": [
+    {
+      "name": "string",
+      "location": "string",
+      "capacity": "string",
+      "estimated_cost": "string",
+      "amenities": ["string"],
+      "availability_notes": "string",
+      "website": "string",
+      "backup_alternatives": ["string"]
+    }
+  ],
+  "timeline_and_logistics": ["string"],
+  "top_recommendation": {
+    "option": "string",
+    "rationale": "string",
+    "dependencies": ["string"]
+  }
+}
         """,
         tools=[WebSearchTool(search_context_size="high"), check_venue_availability, get_venue_details]
     )

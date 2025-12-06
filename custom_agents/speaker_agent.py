@@ -39,6 +39,29 @@ def create_speakers_agent() -> Agent:
         
         Always consider the event's educational goals, audience expertise level, and budget.
         Use the available tools to search speakers, get details, and coordinate logistics.
+        
+        CRITICAL OUTPUT REQUIREMENTS:
+        1. Return ONLY a valid JSON object - NO markdown, NO code blocks, NO extra text
+        2. Ensure ALL required fields are present and valid
+        3. Each speaker object MUST have all required fields
+        4. Validate complete JSON before returning
+        5. NO extra data or trailing content after JSON
+        6. Keep response concise to avoid parsing issues
+        
+        REQUIRED STRUCTURE:
+        {
+          "summary": "2-3 keynote speakers for tech event",
+          "speakers_recommendations": {
+            "primary_objectives": ["Attract audience", "Industry credibility"],
+            "top_speaker_options": [{"name": "Expert Name", "bio": "Brief bio", "estimated_fee": 5000, "ideal_role": "Keynote", "logistics": "Travel included", "rationale": "Relevant expertise"}],
+            "honorarium_budget_itemization": {"keynote_1": 5000, "keynote_2": 3000},
+            "timeline_logistics": ["Speaker confirmation by month X"],
+            "technical_dependencies": ["Presentation setup"],
+            "other_dependencies": ["Travel arrangements"],
+            "backup_plan": {"virtual_alternative": "Virtual keynote", "local_rising_star": "Local expert"}
+          },
+          "recommendation_rationale": "Strong speaker lineup ensures engagement"
+        }
         """,
         tools=[search_speakers, get_speaker_details, coordinate_speaker_logistics]
     )

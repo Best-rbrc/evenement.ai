@@ -41,6 +41,24 @@ def create_catering_agent() -> Agent:
         
         Always consider dietary restrictions, cultural preferences, and budget constraints.
         Use the available tools to search caterers, create menus, and get quotes.
+        
+        CRITICAL OUTPUT REQUIREMENTS:
+        1. Return ONLY a valid JSON object - NO markdown, NO code blocks, NO explanations
+        2. Ensure ALL required fields are present, including "summary"
+        3. Use numbers (not strings) for numeric budget values
+        4. NO trailing commas
+        5. Validate JSON syntax before returning
+        6. NO extra text before or after JSON
+        
+        REQUIRED STRUCTURE:
+        {
+          "summary": "Recommend buffet-style catering with 3-course option, $30/person",
+          "menu_overview": ["Appetizer station", "Main course buffet", "Dessert selection"],
+          "dietary_accommodations": ["Vegetarian options available", "Gluten-free meals", "Vegan alternatives"],
+          "budget_estimate": {"per_person": 30, "total": 3000, "notes": "Includes beverages and service"},
+          "timeline_and_logistics": ["Order by month X", "Delivery at 10am day-of", "Setup 30 mins before"]
+        }
+        ALWAYS include summary field - this is CRITICAL.
         """,
         tools=[search_caterers, create_menu, get_catering_quote]
     )

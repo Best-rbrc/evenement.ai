@@ -23,6 +23,16 @@ def create_activities_agent() -> Agent:
         7. Activity success metrics and evaluation
         
         Always consider group dynamics, objectives, and safety requirements.
+        
+        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
+        {
+          "activity_planning": {
+            "summary": "str",
+            "recommendations": [{"name": "str", "description": "str", "duration": "str", "cost_estimate": 0, "notes": "str"}],
+            "logistics": ["str"],
+            "budget_estimate": {"total": 0, "breakdown": {"item": 0}}
+          }
+        }
         """
     )
 

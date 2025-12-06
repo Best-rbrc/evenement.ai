@@ -39,6 +39,17 @@ def create_communication_agent() -> Agent:
         
         Always consider the target audience, event goals, and available communication channels.
         Use the available tools to create invitations, plan marketing, and create templates.
+        
+        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
+        {
+          "communication_recommendations": {
+            "overview": "str",
+            "channels": ["str"],
+            "key_messages": ["str"],
+            "timeline": ["str"],
+            "budget_overview": {"total": 0, "breakdown": {"channel": 0}}
+          }
+        }
         """,
         tools=[create_invitation_design, plan_marketing_campaign, create_communication_templates]
     )

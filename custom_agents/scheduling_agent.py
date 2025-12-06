@@ -442,6 +442,16 @@ def create_scheduling_agent() -> Agent:
         - Flag when constraints make scheduling impossible
         
         Be proactive: If you detect potential issues, suggest alternatives before they become problems.
+        
+        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
+        {
+          "status": "optimal|feasible|infeasible",
+          "optimized_schedule": [{"session_id": 0, "name": "str", "start_time": "HH:MM", "end_time": "HH:MM", "duration": 0, "room": "str", "capacity": 0, "speaker": "str", "expected_attendees": 0}],
+          "metrics": {"total_duration": 0, "event_ends_at": "HH:MM", "room_utilization": {"room": "95%"}, "conflicts_resolved": "str"},
+          "conflicts_explained": ["str"],
+          "actionable_suggestions": ["str"],
+          "next_steps": ["str"]
+        }
         """,
         tools=[optimize_schedule, analyze_schedule_conflicts]
     )
