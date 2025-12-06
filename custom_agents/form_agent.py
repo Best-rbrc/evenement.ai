@@ -13,38 +13,51 @@ from agents import Runner
 TALLY_MCP_URL = "https://api.tally.so/mcp"
 
 
-def create_form_agent() -> Agent:
+def create_form_agent(mcp_servers=None) -> Agent:
     """Create a Tally form agent that generates registration forms for events.
+    
+    Args:
+        mcp_servers: Optional MCPServers instance for sandboxed form data handling
     
     Returns:
         Agent configured to create event registration forms using Tally MCP tools
     """
-
-    tally_server = MCPServerStdio({
-        "command": "npx",
-        "args": [
-            "mcp-remote",
-            TALLY_MCP_URL,
-            "--header",
-            f"Authorization: Bearer {os.getenv('TALLY_API_KEY', '')}",
-        ],
-    })
-    # Ensure the server is connected before use
-    if hasattr(tally_server, "connect"):
-        connect_method = getattr(tally_server, "connect")
-        if callable(connect_method):
-            try:
-                # Handle both sync and async connect implementations without warnings
-                if asyncio.iscoroutinefunction(connect_method):
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        loop.create_task(connect_method())
+    
+    # Setup MCP servers
+    servers_to_use = []
+    
+    if mcp_servers is not None:
+        # Use sandboxed MCP server if provided
+        servers_to_use = [mcp_servers]
+    else:
+        # Fallback to direct Tally MCP (not sandboxed)
+        tally_server = MCPServerStdio({
+            "command": "npx",
+            "args": [
+                "mcp-remote",
+                TALLY_MCP_URL,
+                "--header",
+                f"Authorization: Bearer {os.getenv('TALLY_API_KEY', '')}",
+            ],
+        })
+        # Ensure the server is connected before use
+        if hasattr(tally_server, "connect"):
+            connect_method = getattr(tally_server, "connect")
+            if callable(connect_method):
+                try:
+                    # Handle both sync and async connect implementations without warnings
+                    if asyncio.iscoroutinefunction(connect_method):
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(connect_method())
+                        else:
+                            loop.run_until_complete(connect_method())
                     else:
-                        loop.run_until_complete(connect_method())
-                else:
-                    connect_method()
-            except Exception:
-                pass  # Fail silently if connect() is async or fails
+                        connect_method()
+                except Exception:
+                    pass  # Fail silently if connect() is async or fails
+        
+        servers_to_use = [tally_server]
 
     # Configure model with rate limit friendly settings
     model_settings = ModelSettings(
@@ -52,10 +65,10 @@ def create_form_agent() -> Agent:
         temperature=0.7
     )
 
-    return Agent(
-        name="Form Creation Specialist",
-        instructions="""
-        You are a specialist in designing and managing online forms using the Tally MCP tools.
+    agent_kwargs = {
+        "name": "Form Creation Specialist",
+        "instructions": """
+        You are a specialist in designing and managing online forms.
 
         Your sole responsibility is to:
         - Create event registration/RSVP forms tailored to the specific event
@@ -71,11 +84,14 @@ def create_form_agent() -> Agent:
         Do not include any other text, explanations, or markdown formatting in your response.
 
         You have NO other duties. Do not answer general questions or perform unrelated tasks.
-        Use the connected Tally MCP tools exclusively when taking any action.
         """,
-        mcp_servers=[tally_server],
-        model_settings=model_settings,
-    )
+        "model_settings": model_settings,
+    }
+    
+    if servers_to_use:
+        agent_kwargs["mcp_servers"] = servers_to_use
+    
+    return Agent(**agent_kwargs)
 
 
 def extract_form_url_from_output(output: str) -> dict:
@@ -113,14 +129,20 @@ def extract_form_url_from_output(output: str) -> dict:
     }
 
 
-async def _run_form_once(prompt: str, form_model_env: str = "FORM_MODEL"):
-    """Run the form agent once, respecting optional model override, ensuring MCP servers are connected."""
+async def _run_form_once(prompt: str, mcp_servers=None, form_model_env: str = "FORM_MODEL"):
+    """Run the form agent once, respecting optional model override, ensuring MCP servers are connected.
+    
+    Args:
+        prompt: The prompt for the form agent
+        mcp_servers: Optional MCPServers instance for sandboxing
+        form_model_env: Environment variable for model override
+    """
     prev_model = os.environ.get("OPENAI_MODEL")
     form_model = os.environ.get(form_model_env)
     if form_model:
         os.environ["OPENAI_MODEL"] = form_model
     try:
-        agent = create_form_agent()
+        agent = create_form_agent(mcp_servers=mcp_servers)
         servers = getattr(agent, "mcp_servers", []) or []
         if servers:
             async with contextlib.AsyncExitStack() as stack:
@@ -138,8 +160,13 @@ async def _run_form_once(prompt: str, form_model_env: str = "FORM_MODEL"):
                 os.environ["OPENAI_MODEL"] = prev_model
 
 
-def run_form_with_retries(prompt: str, max_retries: int = 5) -> tuple[object, str | None]:
+def run_form_with_retries(prompt: str, mcp_servers=None, max_retries: int = 5) -> tuple[object, str | None]:
     """Run the form agent with simple backoff for transient MCP issues.
+    
+    Args:
+        prompt: The prompt for the form agent
+        mcp_servers: Optional MCPServers instance for sandboxing
+        max_retries: Maximum number of retries
 
     Returns a tuple of (result, last_error_text). The caller can decide how to handle failures.
     """
@@ -155,10 +182,10 @@ def run_form_with_retries(prompt: str, max_retries: int = 5) -> tuple[object, st
                 asyncio.set_event_loop(loop)
 
             if loop.is_running():
-                form_result = loop.create_task(_run_form_once(prompt))
+                form_result = loop.create_task(_run_form_once(prompt, mcp_servers=mcp_servers))
                 return form_result, None
 
-            form_result = loop.run_until_complete(_run_form_once(prompt))
+            form_result = loop.run_until_complete(_run_form_once(prompt, mcp_servers=mcp_servers))
             break
         except Exception as e:
             last_exc_text = str(e)

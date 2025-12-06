@@ -15,6 +15,7 @@ import json
 import datetime
 import asyncio
 import shutil
+import os
 from pathlib import Path
 
 # Allow longer agent exchanges (default 10 can be too short for tool-rich agents)
@@ -24,6 +25,7 @@ AGENT_MAX_TURNS = 20
 SANDBOX_DIR = Path("/tmp/mcp_event_outputs")
 PROJECT_OUTPUT_DIR = Path(__file__).parent.parent / "event_outputs"
 SANDBOX_ENABLED = True  # Set to False to disable sandboxing
+USE_SANDBOXED_FORMS = None  # Will be set by user preference
 
 
 def get_current_date_context() -> str:
@@ -32,11 +34,85 @@ def get_current_date_context() -> str:
     return f"Today's date: {current_date.strftime('%B %d, %Y')} ({current_date.strftime('%Y-%m-%d')})"
 
 
-async def setup_sandboxed_mcp():
-    """Setup sandboxed MCP server for file operations.
+async def setup_sandboxed_local_tally_mcp():
+    """Setup sandboxed LOCAL Tally MCP server (custom Python implementation).
+    
+    This uses our custom tally_mcp_server.py that wraps the Tally REST API.
+    Runs in Docker sandbox with network egress to api.tally.so.
     
     Returns:
-        MCPServers instance (not a context manager, just stores the servers)
+        Sandboxed custom Tally MCP server
+    """
+    from mcp_sandbox_openai_sdk import (
+        DevMCPManifest,
+        DomainPort,
+        Permission,
+        SandboxedMCPStdio,
+    )
+    
+    # Custom local Tally MCP server (same setup as test_form_mcp.py)
+    custom_mcp_dir = Path(__file__).parent.parent / "custom_mcp_servers"
+    tally_api_key = os.getenv('TALLY_API_KEY', '')
+    
+    tally_manifest = DevMCPManifest(
+        name="Tally Form Server",
+        description="Custom sandboxed Tally MCP server with network access to api.tally.so",
+        registry="pypi",
+        package_name="tally-mcp-server",  # Not used for DevMCPManifest
+        permissions=[Permission.MCP_AC_NETWORK_CLIENT],
+        code_mount=str(custom_mcp_dir),
+        exec_command="python3 /sandbox/tally_mcp_server.py",
+    )
+    
+    tally_server = SandboxedMCPStdio(
+        manifest=tally_manifest,
+        runtime_args=[],
+        runtime_permissions=[DomainPort("api.tally.so", 443)],
+        static_environment_vars={"TALLY_API_KEY": tally_api_key},
+    )
+    
+    await tally_server.__aenter__()
+    return tally_server
+
+
+async def setup_unsandboxed_tally_mcp():
+    """Setup UNSANDBOXED Tally mcp-remote server (official Tally MCP).
+    
+    This uses Tally's official mcp-remote package without sandboxing.
+    Connects directly to api.tally.so with OAuth2 authentication.
+    
+    Returns:
+        Unsandboxed Tally MCP client
+    """
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    
+    tally_api_key = os.getenv('TALLY_API_KEY', '')
+    
+    server_params = StdioServerParameters(
+        command="npx",
+        args=[
+            "mcp-remote",
+            "https://api.tally.so/mcp",
+            "--header",
+            f"Authorization: Bearer {tally_api_key}",
+        ],
+    )
+    
+    stdio_transport = await stdio_client(server_params).__aenter__()
+    session = ClientSession(stdio_transport[0], stdio_transport[1])
+    await session.__aenter__()
+    
+    return session
+
+
+async def setup_sandboxed_filesystem_mcp():
+    """Setup sandboxed MCP server for calendar file operations.
+    
+    Creates filesystem server for ICS calendar file writes in sandbox.
+    
+    Returns:
+        Sandboxed filesystem MCP server
     """
     from mcp_sandbox_openai_sdk import (
         FSAccess,
@@ -48,7 +124,8 @@ async def setup_sandboxed_mcp():
     SANDBOX_DIR.mkdir(parents=True, exist_ok=True)
     PROJECT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    manifest = MCPManifest(
+    # Filesystem server manifest
+    fs_manifest = MCPManifest(
         name="Filesystem Server",
         description="Sandbox-restricted file server for event outputs (ICS calendar files)",
         registry="npm",
@@ -60,18 +137,17 @@ async def setup_sandboxed_mcp():
         ],
     )
     
-    # Create sandboxed MCP server
-    sandboxed_server = SandboxedMCPStdio(
-        manifest=manifest,
+    # Create sandboxed filesystem server
+    fs_server = SandboxedMCPStdio(
+        manifest=fs_manifest,
         runtime_args=[str(SANDBOX_DIR)],
         runtime_permissions=[
             FSAccess(str(SANDBOX_DIR), read=True, write=True),
         ],
     )
     
-    # Initialize the server
-    await sandboxed_server.__aenter__()
-    return sandboxed_server
+    await fs_server.__aenter__()
+    return fs_server
 
 
 def copy_sandbox_files_to_project():
@@ -134,6 +210,34 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     print(f"Type: {event_details['event_type']}")
     print(f"Date Context: {get_current_date_context()}")
     print(f"{'='*60}\n")
+    
+    # Ask user preference for form creation method
+    global USE_SANDBOXED_FORMS
+    if USE_SANDBOXED_FORMS is None:
+        print("\n📋 FORM CREATION METHOD SELECTION")
+        print("-" * 60)
+        print("How would you like to create registration forms?\n")
+        print("1. Sandboxed (Recommended) - Custom local MCP in Docker sandbox")
+        print("   ✅ Runs in isolated container")
+        print("   ✅ Network-restricted (api.tally.so only)")
+        print("   ✅ Uses Tally REST API directly\n")
+        print("2. Unsandboxed - Official Tally mcp-remote server")
+        print("   ⚠️  No sandboxing (direct system access)")
+        print("   ⚠️  OAuth2 authentication (may have issues)")
+        print("   ⚠️  External npm package dependency\n")
+        
+        while True:
+            choice = input("Enter your choice (1 or 2): ").strip()
+            if choice == "1":
+                USE_SANDBOXED_FORMS = True
+                print("\n✅ Using sandboxed local MCP server for forms\n")
+                break
+            elif choice == "2":
+                USE_SANDBOXED_FORMS = False
+                print("\n✅ Using unsandboxed Tally mcp-remote for forms\n")
+                break
+            else:
+                print("⚠️  Invalid choice. Please enter 1 or 2.\n")
 
     # ============================================================
     # PHASE 1: COORDINATOR PLANNING
@@ -141,32 +245,55 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     print("📋 PHASE 1: Strategic Planning\n")
     print("Coordinator analyzing event requirements...\n")
 
-    # Setup sandboxed MCP if enabled (before creating agents that need it)
-    mcp_servers = None
+    # Setup sandboxed MCP servers based on user preferences
+    fs_server = None
+    tally_server = None
     global SANDBOX_ENABLED
+    
+    # Setup filesystem MCP (always sandboxed if SANDBOX_ENABLED)
     if SANDBOX_ENABLED:
         try:
-            print("🔒 Setting up sandboxed file server...\n")
-            # Use the active event loop to setup MCP
-            mcp_servers = loop.run_until_complete(setup_sandboxed_mcp())
-            print("✅ MCP server initialized - calendar files will be sandboxed\n")
+            print("🔒 Setting up sandboxed filesystem server...\n")
+            fs_server = loop.run_until_complete(setup_sandboxed_filesystem_mcp())
+            print("✅ Filesystem MCP initialized - calendar will be sandboxed\n")
         except Exception as e:
-            print(f"⚠️  MCP setup failed: {e}\n")
-            print("⏸️  Falling back to local file writes (no sandboxing)\n")
-            SANDBOX_ENABLED = False
-            mcp_servers = None
+            print(f"⚠️  Filesystem MCP setup failed: {e}\n")
+            print("⏸️  Falling back to local I/O for calendar\n")
+            fs_server = None
+    
+    # Setup Tally MCP based on user preference
+    if USE_SANDBOXED_FORMS:
+        try:
+            print("🔒 Setting up sandboxed local Tally MCP server...\n")
+            tally_server = loop.run_until_complete(setup_sandboxed_local_tally_mcp())
+            print("✅ Custom Tally MCP initialized - forms will be sandboxed\n")
+        except Exception as e:
+            print(f"⚠️  Sandboxed Tally MCP setup failed: {e}\n")
+            print("⏸️  Forms will not be created\n")
+            tally_server = None
+    else:
+        try:
+            print("📡 Setting up unsandboxed Tally mcp-remote server...\n")
+            tally_server = loop.run_until_complete(setup_unsandboxed_tally_mcp())
+            print("✅ Tally mcp-remote initialized - forms will use external server\n")
+        except Exception as e:
+            print(f"⚠️  Tally mcp-remote setup failed: {e}\n")
+            print("⏸️  Forms will not be created\n")
+            tally_server = None
 
     # Create all available specialists (coordinator will decide which to use)
+    # Note: calendar and form are NOT in this list because they're Phase 4 output generators,
+    # not Phase 2 domain specialists. They're created separately below after Phase 2 execution.
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
-        "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"
+        "communication", "activities", "entertainment", "budgeting", "scheduling"
     ]
-    all_specialists = create_specialized_agents(all_agent_types, mcp_servers=mcp_servers if SANDBOX_ENABLED else None)
+    all_specialists = create_specialized_agents(all_agent_types, mcp_servers=None)  # Phase 2 specialists don't need MCP
     
-    if mcp_servers is not None:
-        print("📡 Calendar agent configured with MCP servers\n")
-    else:
-        print("📂 Calendar agent using local file I/O\n")
+    # Status summary
+    calendar_status = "sandboxed" if fs_server else "local I/O"
+    form_status = "sandboxed (custom)" if (tally_server and USE_SANDBOXED_FORMS) else "unsandboxed (mcp-remote)" if tally_server else "disabled"
+    print(f"📊 Output Configuration: Calendar={calendar_status}, Forms={form_status}\n")
     
     # Create coordinator with handoffs to all specialists
     coordinator = create_coordinator_agent(event_details, all_agent_types, all_specialists)
@@ -474,10 +601,18 @@ Use handoffs if needed to refine or add information. Then provide your final syn
     print("📅 PHASE 4: Event Outputs (Calendar & Registration Form)")
     print(f"{'='*60}\n")
     
+    # Create calendar and form agents now (not part of Phase 2 coordinator selection)
+    from custom_agents.calendar_agent import create_calendar_agent
+    from custom_agents.form_agent import create_form_agent
+    
+    # Calendar agent: use sandboxed filesystem MCP (if available)
+    calendar_agent = create_calendar_agent(mcp_servers=fs_server if fs_server else None)
+    
+    # Form agent: use appropriate Tally MCP (sandboxed local or unsandboxed remote)
+    form_agent = create_form_agent(mcp_servers=tally_server if tally_server else None)
+    
     # Create calendar invite
     print("Creating calendar invite file...\n")
-    
-    calendar_agent = all_specialists["calendar"]
     
     calendar_prompt = f"""You are the Calendar Specialist for "{event_details['event_name']}".
 
@@ -551,9 +686,10 @@ Output JSON with:
     )
 
     # Create the form via shared helper (handles retries/backoff)
+    # Pass sandboxed Tally server if enabled
     from custom_agents.form_agent import extract_form_url_from_output, run_form_with_retries
 
-    form_result, form_error = run_form_with_retries(form_prompt)
+    form_result, form_error = run_form_with_retries(form_prompt, mcp_servers=tally_server if SANDBOX_ENABLED else None)
 
     # Extract form URL from output; on failure, surface the error instead of generating a local fallback
     form_data = extract_form_url_from_output(form_result.final_output if form_result else "")
@@ -677,12 +813,11 @@ Output JSON with:
         "sms_message_sid": sms_message_sid
     }
     
-    # Cleanup: close MCP and copy files
+    # Cleanup: close MCP servers and copy files
     try:
-        if mcp_servers is not None:
-            # MCPServers has async exit, but we can't await in sync context
-            # Just let it be garbage collected; the sandboxed server will close
-            print("\n🔒 Sandboxed file server closed.")
+        if fs_server is not None or tally_server is not None:
+            # Sandboxed servers will be garbage collected and closed
+            print("\n🔒 Sandboxed servers closed.")
         
         if SANDBOX_ENABLED and SANDBOX_DIR.exists():
             print("📁 Copying files from sandbox to project...")
@@ -698,7 +833,7 @@ Output JSON with:
         print("=" * 60)
         print("📅 Calendar Files Created:")
         for cf in calendar_files:
-            if mcp_servers is not None:
+            if fs_server is not None:
                 print(f"  📡 {cf.name} (via sandboxed MCP)")
             else:
                 print(f"  📂 {cf.name} (local file I/O)")
