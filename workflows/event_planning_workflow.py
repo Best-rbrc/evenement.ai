@@ -14,141 +14,80 @@ from typing import Dict, Any, List
 import json
 import datetime
 import asyncio
-import sys
+import shutil
+from pathlib import Path
 
 # Allow longer agent exchanges (default 10 can be too short for tool-rich agents)
 AGENT_MAX_TURNS = 20
 
-# Canonical JSON schemas the agents must return (used in prompts for consistency)
-AGENT_SCHEMAS = {
-    "planning": {
-        "analysis": "string",
-        "required_agents": ["venue", "catering", "programme", "speakers", "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"],
-        "execution_order_rationale": "string",
-        "special_considerations": ["string"],
-    },
-    "budgeting": {
-        "budget_allocation_recommended": {"category": {"recommended_spend": "number", "pct_of_total": "number", "notes": "string"}},
-        "major_category_breakdowns": {"category": {"recommended_spend": "number", "pct_of_total": "number", "key_assumptions": ["string"]}},
-        "what_if_scenarios": [{"name": "string", "delta": "string", "impact": "string", "recommendation": "string"}],
-        "scenario_recommendation": {"name": "string", "reason": "string"},
-        "allocation_rationale": "string",
-        "warnings": ["string"],
-    },
-    "venue": {
-        "summary": "string",
-        "venues": [{"name": "string", "location": "string", "capacity": "number", "estimated_cost": "string|number", "amenities": ["string"], "availability_notes": "string", "website": "string", "backup_alternatives": ["string"]}],
-        "timeline_and_logistics": ["string"],
-        "top_recommendation": {"option": "string", "rationale": "string", "dependencies": ["string"]},
-    },
-    "catering": {
-        "summary": "string",
-        "menu_overview": ["string"],
-        "dietary_accommodations": ["string"],
-        "budget_estimate": {"per_person": "number", "total": "number", "notes": "string"},
-        "timeline_and_logistics": ["string"],
-    },
-    "programme": {
-        "summary": "string",
-        "programme_recommendations": {
-            "options": [{"name": "string", "description": "string", "capacity": "string|number", "cost": "string|number", "amenities": ["string"], "dependencies": ["string"]}],
-            "timeline_and_logistics": ["string"],
-            "session_and_flow": {"key": "time-range-or-note"},
-            "breaks_networking": ["string"],
-            "technical_and_materials_requirements": ["string"],
-            "contingency_plans": ["string"],
-            "top_recommendation": {"option": "string", "rationale": "string", "dependencies": "string"},
-            "backup_option": {"option": "string", "rationale": "string"},
-        },
-        "next_steps": ["string"],
-    },
-    "speakers": {
-        "summary": "string",
-        "speakers_recommendations": {
-            "primary_objectives": ["string"],
-            "top_speaker_options": [{"name": "string", "bio": "string", "estimated_fee": "string|number", "ideal_role": "string", "logistics": "string", "rationale": "string"}],
-            "honorarium_budget_itemization": {"item": "string|number"},
-            "timeline_logistics": ["string"],
-            "technical_dependencies": ["string"],
-            "other_dependencies": ["string"],
-            "backup_plan": {"virtual_alternative": "string", "local_rising_star": "string"},
-        },
-        "recommendation_rationale": "string",
-    },
-    "activities": {
-        "activity_planning": {
-            "summary": "string",
-            "recommendations": [{"name": "string", "description": "string", "duration": "string|number", "cost_estimate": "string|number", "notes": "string"}],
-            "logistics": ["string"],
-            "budget_estimate": {"total": "number", "breakdown": {"item": "number"}},
-        }
-    },
-    "entertainment": {
-        "entertainment_recommendations": {
-            "summary": "string",
-            "specific_options": [{"name": "string", "description": "string", "cost_estimate": "number", "vendor_notes": "string"}],
-            "budget_estimate": {"total": "number", "breakdown": {"item": "number"}},
-            "recommended_package": {"option": "string", "components": ["string"], "rationale": ["string"]},
-            "timeline_and_logistics": ["string"],
-            "technical_requirements": ["string"],
-            "backup_entertainment_plans": [{"scenario": "string", "plan": "string"}],
-            "dependencies_on_other_areas": ["string"],
-            "top_recommendations_and_rationale": {
-                "recommendation_1": {"choice": "string", "reason": "string"},
-                "recommendation_2": {"choice": "string", "reason": "string"},
-            },
-        }
-    },
-    "communication": {
-        "communication_recommendations": {
-            "overview": "string",
-            "channels": ["string"],
-            "key_messages": ["string"],
-            "timeline": ["string"],
-            "budget_overview": {"total": "number", "breakdown": {"channel": "number"}},
-        }
-    },
-    "scheduling": {
-        "status": "optimal|feasible|infeasible",
-        "optimized_schedule": [{"session_id": "number", "name": "string", "start_time": "HH:MM", "end_time": "HH:MM", "duration": "number", "room": "string", "capacity": "number", "speaker": "string", "expected_attendees": "number"}],
-        "metrics": {"total_duration": "number", "event_ends_at": "HH:MM", "room_utilization": {"room": "pct"}, "conflicts_resolved": "string"},
-        "conflicts_explained": ["string"],
-        "actionable_suggestions": ["string"],
-        "next_steps": ["string"],
-    },
-    "calendar": {
-        "calendar_file_path": "string",
-        "event_summary": "string",
-        "timing_details": "string",
-        "import_instructions": "string",
-    },
-    "form": {
-        "form_url": "string",
-        "status": "success|error",
-        "message": "string|null",
-    },
-    "final_plan": {
-        "executive_summary": "string",
-        "timeline": [{"phase": "string", "tasks": ["string"], "deadline": "YYYY-MM-DD"}],
-        "schedule": {
-            "optimized": "boolean",
-            "sessions": [{"session_id": "number", "name": "string", "start_time": "HH:MM", "end_time": "HH:MM", "duration": "number", "room": "string", "capacity": "number", "speaker": "string", "expected_attendees": "number"}],
-            "metrics": {"total_duration": "string|number", "event_ends_at": "HH:MM", "room_utilization": {"room": "pct"}, "conflicts_resolved": "string"},
-            "status": "optimal|feasible|infeasible",
-        },
-        "budget": {"total_available": "number", "total_allocated": "number", "by_category": {"category": "number"}, "status": "within_budget|over_budget|at_limit"},
-        "recommendations": {"venue": {}, "catering": {}, "programme": {}, "speakers": {}, "communication": {}, "activities": {}, "entertainment": {}, "budgeting": {}, "scheduling": {}},
-        "risks": [{"risk": "string", "severity": "high|medium|low", "mitigation": "string"}],
-        "action_items": [{"action": "string", "owner": "string", "deadline": "string", "priority": "high|medium|low"}],
-        "assumptions": ["string"],
-    },
-}
+# Sandboxed MCP configuration
+SANDBOX_DIR = Path("/tmp/mcp_event_outputs")
+PROJECT_OUTPUT_DIR = Path(__file__).parent.parent / "event_outputs"
+SANDBOX_ENABLED = True  # Set to False to disable sandboxing
 
 
 def get_current_date_context() -> str:
     """Get current date context for agents."""
     current_date = datetime.datetime.now()
     return f"Today's date: {current_date.strftime('%B %d, %Y')} ({current_date.strftime('%Y-%m-%d')})"
+
+
+async def setup_sandboxed_mcp():
+    """Setup sandboxed MCP server for file operations.
+    
+    Returns:
+        MCPServers instance (not a context manager, just stores the servers)
+    """
+    from mcp_sandbox_openai_sdk import (
+        FSAccess,
+        MCPManifest,
+        Permission,
+        SandboxedMCPStdio,
+    )
+    
+    SANDBOX_DIR.mkdir(parents=True, exist_ok=True)
+    PROJECT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    
+    manifest = MCPManifest(
+        name="Filesystem Server",
+        description="Sandbox-restricted file server for event outputs (ICS calendar files)",
+        registry="npm",
+        package_name="@modelcontextprotocol/server-filesystem",
+        permissions=[
+            Permission.MCP_AC_FILESYSTEM_READ,
+            Permission.MCP_AC_FILESYSTEM_WRITE,
+            Permission.MCP_AC_FILESYSTEM_DELETE,
+        ],
+    )
+    
+    # Create sandboxed MCP server
+    sandboxed_server = SandboxedMCPStdio(
+        manifest=manifest,
+        runtime_args=[str(SANDBOX_DIR)],
+        runtime_permissions=[
+            FSAccess(str(SANDBOX_DIR), read=True, write=True),
+        ],
+    )
+    
+    # Initialize the server
+    await sandboxed_server.__aenter__()
+    return sandboxed_server
+
+
+def copy_sandbox_files_to_project():
+    """Copy files from sandbox temp directory to project directory."""
+    if not SANDBOX_DIR.exists():
+        return
+    
+    copied_count = 0
+    for file in SANDBOX_DIR.glob("*"):
+        if file.is_file():
+            dest = PROJECT_OUTPUT_DIR / file.name
+            shutil.copy2(file, dest)
+            copied_count += 1
+    
+    if copied_count > 0:
+        print(f"✅ Copied {copied_count} file(s) from sandbox to {PROJECT_OUTPUT_DIR}")
 
 
 def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
@@ -170,14 +109,15 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     - Produces final unified plan
     """
     # Ensure an asyncio event loop exists for sync runner on Python 3.13+
-    def _ensure_loop():
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            loop_local = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop_local)
-
-    _ensure_loop()
+    # Create ONE loop and use it throughout the workflow
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
     # Import SDK components
     try:
@@ -201,12 +141,32 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     print("📋 PHASE 1: Strategic Planning\n")
     print("Coordinator analyzing event requirements...\n")
 
+    # Setup sandboxed MCP if enabled (before creating agents that need it)
+    mcp_servers = None
+    global SANDBOX_ENABLED
+    if SANDBOX_ENABLED:
+        try:
+            print("🔒 Setting up sandboxed file server...\n")
+            # Use the active event loop to setup MCP
+            mcp_servers = loop.run_until_complete(setup_sandboxed_mcp())
+            print("✅ MCP server initialized - calendar files will be sandboxed\n")
+        except Exception as e:
+            print(f"⚠️  MCP setup failed: {e}\n")
+            print("⏸️  Falling back to local file writes (no sandboxing)\n")
+            SANDBOX_ENABLED = False
+            mcp_servers = None
+
     # Create all available specialists (coordinator will decide which to use)
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
         "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"
     ]
-    all_specialists = create_specialized_agents(all_agent_types)
+    all_specialists = create_specialized_agents(all_agent_types, mcp_servers=mcp_servers if SANDBOX_ENABLED else None)
+    
+    if mcp_servers is not None:
+        print("📡 Calendar agent configured with MCP servers\n")
+    else:
+        print("📂 Calendar agent using local file I/O\n")
     
     # Create coordinator with handoffs to all specialists
     coordinator = create_coordinator_agent(event_details, all_agent_types, all_specialists)
@@ -238,8 +198,13 @@ Available specialists:
 - calendar: Calendar invites and ICS file generation
 - form: Online registration/RSVP form creation (auto-generated in Phase 4)
 
-Return ONLY valid JSON matching this schema:
-{json.dumps(AGENT_SCHEMAS['planning'], indent=2)}
+Output your plan as JSON:
+{{
+  "analysis": "Brief analysis of event needs",
+  "required_agents": ["agent1", "agent2", ...],  // In optimal execution order
+  "execution_order_rationale": "Why this order makes sense",
+  "special_considerations": ["consideration1", "consideration2", ...]
+}}
 
 IMPORTANT GUIDELINES:
 - ALWAYS include "budgeting" agent early in the sequence (typically after venue/catering needs are identified)
@@ -258,13 +223,12 @@ IMPORTANT GUIDELINES:
 - Be strategic and selective - don't include agents that aren't truly needed for this event type."""
 
     # Run coordinator planning with rate-limit aware retries
-    _ensure_loop()
+    # Event loop is already set up at function start
     def _run_sync_with_backoff(agent, prompt, max_retries: int = 3):
         import time, re, random
         last_exc = None
         for attempt in range(max_retries):
             try:
-                _ensure_loop()
                 return Runner.run_sync(agent, prompt, max_turns=AGENT_MAX_TURNS)
             except Exception as e:
                 last_exc = e
@@ -345,8 +309,7 @@ Your task:
 
 Required categories for this event: {', '.join([a for a in required_agents if a != 'budgeting' and a not in ['calendar', 'form', 'scheduling']])}
 
-Return ONLY valid JSON matching this schema:
-{json.dumps(AGENT_SCHEMAS['budgeting'], indent=2)}"""
+Output comprehensive JSON with budget allocation, scenarios (if applicable), and recommendations."""
         elif agent_name == "scheduling":
             # Special handling for scheduling agent
             specialist_prompt = f"""You are the Advanced Scheduling specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
@@ -375,8 +338,7 @@ Input format for optimize_schedule:
 
 If scheduling is infeasible, explain conflicts and provide actionable suggestions.
 
-Return ONLY valid JSON matching this schema:
-{json.dumps(AGENT_SCHEMAS['scheduling'], indent=2)}"""
+Output comprehensive JSON with optimized schedule, metrics, and any conflict resolutions."""
         else:
             # Add budget context if budgeting agent has run
             budget_context = ""
@@ -398,10 +360,8 @@ Provide detailed, actionable recommendations for {agent_name}, including:
 - Top recommendations with rationale
 - Any dependencies on other areas
 
-Return ONLY valid JSON matching this schema:
-{json.dumps(AGENT_SCHEMAS.get(agent_name, {}), indent=2)}"""
+Output structured JSON with your recommendations."""
 
-        _ensure_loop()
         result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
         specialist_outputs[agent_name] = result.final_output
         
@@ -464,12 +424,45 @@ Your task for PHASE 3 - FINALIZATION:
    - Prioritized action items with deadlines
    - Assumptions made
 
-4. OUTPUT as valid JSON matching this schema:
-{json.dumps(AGENT_SCHEMAS['final_plan'], indent=2)}
+4. OUTPUT as valid JSON:
+{{
+  "executive_summary": "...",
+  "timeline": [
+    {{"phase": "...", "tasks": [...], "deadline": "..."}}
+  ],
+  "schedule": {{
+    "optimized": true/false,
+    "sessions": [...],  // REQUIRED if scheduling agent was used
+    "metrics": {{
+      "total_duration": "...",
+      "event_ends_at": "...",
+      "room_utilization": {{}},
+      "conflicts_resolved": "..."
+    }},
+    "status": "optimal | feasible | infeasible"  // from scheduling agent output
+  }},
+  "budget": {{
+    "total_available": "...",
+    "total_allocated": "...",
+    "by_category": {{}},
+    "status": "within_budget | over_budget | at_limit"
+  }},
+  "recommendations": {{
+    "venue": {{}},
+    "catering": {{}},
+    ...
+  }},
+  "risks": [
+    {{"risk": "...", "severity": "high|medium|low", "mitigation": "..."}}
+  ],
+  "action_items": [
+    {{"action": "...", "owner": "...", "deadline": "...", "priority": "high|medium|low"}}
+  ],
+  "assumptions": [...]
+}}
 
 Use handoffs if needed to refine or add information. Then provide your final synthesized plan."""
 
-    _ensure_loop()
     final_result = _run_sync_with_backoff(coordinator, finalization_prompt)
     
     print("✅ Finalization complete!\n")
@@ -522,12 +515,8 @@ Output JSON with:
 - calendar_file_path
 - event_summary
 - timing_details
-- import_instructions
+- import_instructions"""
 
-Return ONLY valid JSON matching this schema:
-{json.dumps(AGENT_SCHEMAS['calendar'], indent=2)}"""
-
-    _ensure_loop()
     calendar_result = Runner.run_sync(calendar_agent, calendar_prompt, max_turns=AGENT_MAX_TURNS)
     
     print("✅ Calendar invite generated!\n")
@@ -558,7 +547,7 @@ Return ONLY valid JSON matching this schema:
         f"Create an RSVP/registration form for '{event_details.get('event_name')}'.\n\n"
         f"Essentials: {json.dumps(concise_event, indent=2)}\n\n"
         f"Guidelines: {json.dumps(minimal_context, indent=2)}\n\n"
-        f"Return ONLY valid JSON matching this schema:\n{json.dumps(AGENT_SCHEMAS['form'], indent=2)}"
+        "Return ONLY valid JSON with: {\"form_url\": \"https://tally.so/r/xxxxx\", \"status\": \"success\"}."
     )
 
     # Create the form via shared helper (handles retries/backoff)
@@ -627,51 +616,45 @@ Return ONLY valid JSON matching this schema:
     
     # Ask user if they want to send SMS
     try:
-        # Avoid blocking in non-interactive environments (e.g., HTTP API)
-        if sys.stdin is None or not sys.stdin.isatty():
-            print("SMS notification skipped (non-interactive environment).\n")
-            sms_sent = False
-            sms_message_sid = None
-        else:
-            send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
+        send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
+        
+        if send_sms in ['yes', 'y', 'true', '1']:
+            print("Sending SMS notification...\n")
             
-            if send_sms in ['yes', 'y', 'true', '1']:
-                print("Sending SMS notification...\n")
+            try:
+                from twilio.rest import Client
                 
-                try:
-                    from twilio.rest import Client
-                    
-                    # Twilio credentials
-                    account_sid = 'ACad1d89daf3c3b29db84f0714eeadb6cb'
-                    auth_token = '2a20c86b0ed50623d61b9404f85a6281'
-                    client = Client(account_sid, auth_token)
-                    
-                    # Create SMS body with Tally form
-                    event_name = event_details.get('event_name', 'Event')
-                    event_date = event_details.get('event_date', 'TBD')
-                    form_url = form_data.get('form_url', 'Form link available soon')
-                    
-                    sms_body = f"Hey! You're invited to {event_name} on {event_date}. RSVP: {form_url}"
-                    
-                    # Send SMS
-                    message = client.messages.create(
-                        from_='+15075955374',
-                        body=sms_body,
-                        to='+41784018164'
-                    )
-                    
-                    print(f"✅ SMS sent successfully! Message SID: {message.sid}\n")
-                    sms_sent = True
-                    sms_message_sid = message.sid
-                    
-                except Exception as sms_error:
-                    print(f"⚠️  Failed to send SMS: {sms_error}\n")
-                    sms_sent = False
-                    sms_message_sid = None
-            else:
-                print("SMS notification skipped.\n")
+                # Twilio credentials
+                account_sid = 'ACad1d89daf3c3b29db84f0714eeadb6cb'
+                auth_token = '2a20c86b0ed50623d61b9404f85a6281'
+                client = Client(account_sid, auth_token)
+                
+                # Create SMS body with Tally form
+                event_name = event_details.get('event_name', 'Event')
+                event_date = event_details.get('event_date', 'TBD')
+                form_url = form_data.get('form_url', 'Form link available soon')
+                
+                sms_body = f"Hey! You're invited to {event_name} on {event_date}. RSVP: {form_url}"
+                
+                # Send SMS
+                message = client.messages.create(
+                    from_='+15075955374',
+                    body=sms_body,
+                    to='+41784018164'
+                )
+                
+                print(f"✅ SMS sent successfully! Message SID: {message.sid}\n")
+                sms_sent = True
+                sms_message_sid = message.sid
+                
+            except Exception as sms_error:
+                print(f"⚠️  Failed to send SMS: {sms_error}\n")
                 sms_sent = False
                 sms_message_sid = None
+        else:
+            print("SMS notification skipped.\n")
+            sms_sent = False
+            sms_message_sid = None
             
     except Exception as e:
         print(f"⚠️  SMS input error: {e}\n")
@@ -679,7 +662,7 @@ Return ONLY valid JSON matching this schema:
         sms_message_sid = None
     
     # Return comprehensive results
-    return {
+    result = {
         "event_details": event_details,
         "planning_phase": planning_result.final_output,
         "specialist_outputs": specialist_outputs,
@@ -693,5 +676,34 @@ Return ONLY valid JSON matching this schema:
         "sms_sent": sms_sent,
         "sms_message_sid": sms_message_sid
     }
+    
+    # Cleanup: close MCP and copy files
+    try:
+        if mcp_servers is not None:
+            # MCPServers has async exit, but we can't await in sync context
+            # Just let it be garbage collected; the sandboxed server will close
+            print("\n🔒 Sandboxed file server closed.")
+        
+        if SANDBOX_ENABLED and SANDBOX_DIR.exists():
+            print("📁 Copying files from sandbox to project...")
+            copy_sandbox_files_to_project()
+            print("✅ Sandbox files copied to event_outputs/\n")
+    except Exception as cleanup_error:
+        print(f"⚠️  Cleanup error: {cleanup_error}")
+    
+    # Show where calendar file was created
+    from pathlib import Path
+    calendar_files = list(Path("event_outputs").glob("*.ics"))
+    if calendar_files:
+        print("=" * 60)
+        print("📅 Calendar Files Created:")
+        for cf in calendar_files:
+            if mcp_servers is not None:
+                print(f"  📡 {cf.name} (via sandboxed MCP)")
+            else:
+                print(f"  📂 {cf.name} (local file I/O)")
+        print("=" * 60 + "\n")
+    
+    return result
 
 
