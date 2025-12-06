@@ -272,14 +272,9 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
             print("⏸️  Forms will not be created\n")
             tally_server = None
     else:
-        try:
-            print("📡 Setting up unsandboxed Tally mcp-remote server...\n")
-            tally_server = loop.run_until_complete(setup_unsandboxed_tally_mcp())
-            print("✅ Tally mcp-remote initialized - forms will use external server\n")
-        except Exception as e:
-            print(f"⚠️  Tally mcp-remote setup failed: {e}\n")
-            print("⏸️  Forms will not be created\n")
-            tally_server = None
+        # For unsandboxed path, let form_agent manage the official mcp-remote client itself.
+        print("📡 Using unsandboxed Tally mcp-remote (managed inside form_agent)...\n")
+        tally_server = None
 
     # Create all available specialists (coordinator will decide which to use)
     # Note: calendar and form are NOT in this list because they're Phase 4 output generators,
@@ -292,7 +287,11 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     
     # Status summary
     calendar_status = "sandboxed" if fs_server else "local I/O"
-    form_status = "sandboxed (custom)" if (tally_server and USE_SANDBOXED_FORMS) else "unsandboxed (mcp-remote)" if tally_server else "disabled"
+    if USE_SANDBOXED_FORMS:
+        form_status = "sandboxed (custom)" if tally_server else "disabled"
+    else:
+        # Unsandboxed path is handled internally by form_agent via mcp-remote
+        form_status = "unsandboxed (mcp-remote via form_agent)"
     print(f"📊 Output Configuration: Calendar={calendar_status}, Forms={form_status}\n")
     
     # Create coordinator with handoffs to all specialists
@@ -608,8 +607,10 @@ Use handoffs if needed to refine or add information. Then provide your final syn
     # Calendar agent: use sandboxed filesystem MCP (if available)
     calendar_agent = create_calendar_agent(mcp_servers=fs_server if fs_server else None)
     
-    # Form agent: use appropriate Tally MCP (sandboxed local or unsandboxed remote)
-    form_agent = create_form_agent(mcp_servers=tally_server if tally_server else None)
+    # Form agent:
+    # - sandboxed path: pass the custom MCP server
+    # - unsandboxed path: pass None so form_agent uses mcp-remote internally
+    form_agent = create_form_agent(mcp_servers=tally_server if USE_SANDBOXED_FORMS else None)
     
     # Create calendar invite
     print("Creating calendar invite file...\n")
