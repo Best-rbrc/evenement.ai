@@ -1,3 +1,4 @@
+
 import asyncio
 import os
 import json
@@ -6,45 +7,55 @@ import time
 import random
 import contextlib
 from agents import Agent
-from agents.mcp import MCPServerStdio
 from agents.model_settings import ModelSettings
 from agents import Runner
+# --- Sandbox SDK imports ---
+from mcp_sandbox_openai_sdk.sandbox import SandboxedMCPStdio
+from mcp_sandbox_openai_sdk.mcp_manifest import MCPManifest, Permission
+from mcp_sandbox_openai_sdk.runtime_permissions import DomainPort, EnvironmentVariable
+import subprocess
 
 TALLY_MCP_URL = "https://api.tally.so/mcp"
 
 
 def create_form_agent() -> Agent:
-    """Create a Tally form agent that generates registration forms for events.
-    
-    Returns:
-        Agent configured to create event registration forms using Tally MCP tools
-    """
+    """Create a Tally form agent that generates registration forms for events, using sandboxed MCP server."""
 
-    tally_server = MCPServerStdio({
-        "command": "npx",
-        "args": [
-            "mcp-remote",
-            TALLY_MCP_URL,
-            "--header",
-            f"Authorization: Bearer {os.getenv('TALLY_API_KEY', '')}",
+    # Check if Docker is available
+    try:
+        subprocess.run(["docker", "--version"], capture_output=True, check=True, timeout=5)
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+        raise RuntimeError(
+            "Docker is required for the sandboxed MCP server but is not available.\n"
+            "Please install Docker Desktop and ensure it's running:\n"
+            "  - Download from: https://www.docker.com/products/docker-desktop\n"
+            "  - After installation, start Docker Desktop\n"
+            "  - Verify with: docker --version"
+        ) from e
+
+    # --- Sandbox SDK: Use SandboxedMCPStdio for least-privilege MCP server ---
+    tally_manifest = MCPManifest(
+        name="Tally MCP",
+        description="Tally MCP server for event registration form creation.",
+        registry="npm",
+        package_name="tally-mcp-remote",
+        permissions=[
+            Permission.MCP_AC_NETWORK_CLIENT,  # Allow HTTP/network access
+            Permission.MCP_AC_SYSTEM_ENV_READ, # Allow reading env vars
         ],
-    })
-    # Ensure the server is connected before use
-    if hasattr(tally_server, "connect"):
-        connect_method = getattr(tally_server, "connect")
-        if callable(connect_method):
-            try:
-                # Handle both sync and async connect implementations without warnings
-                if asyncio.iscoroutinefunction(connect_method):
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        loop.create_task(connect_method())
-                    else:
-                        loop.run_until_complete(connect_method())
-                else:
-                    connect_method()
-            except Exception:
-                pass  # Fail silently if connect() is async or fails
+    )
+    
+    # Runtime permissions with user consent
+    runtime_permissions = [
+        DomainPort(domain="api.tally.so", port=443),  # HTTPS access to Tally API
+        EnvironmentVariable(name="TALLY_API_KEY"),     # Access to API key env var
+    ]
+    
+    tally_server = SandboxedMCPStdio(
+        manifest=tally_manifest,
+        runtime_permissions=runtime_permissions,
+        client_session_timeout_seconds=180,  # Increased timeout for Docker container startup
+    )
 
     # Configure model with rate limit friendly settings
     model_settings = ModelSettings(
