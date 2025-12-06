@@ -1,8 +1,13 @@
 """Test form agent with sandboxed MCP file writing."""
+import sys
+from pathlib import Path
+
+# Add parent directory to path so we can import custom_agents
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import asyncio
 import json
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 from agents import Runner
 from custom_agents.form_agent import create_form_agent
@@ -28,7 +33,8 @@ async def setup_sandboxed_mcp():
         SANDBOX_DIR.mkdir(parents=True, exist_ok=True)
         
         # Custom Tally MCP manifest (local Python server)
-        tally_server_path = Path(__file__).parent / "custom_mcp_servers"
+        # Navigate up to project root, then to custom_mcp_servers
+        tally_server_path = Path(__file__).parent.parent / "custom_mcp_servers"
         tally_manifest = DevMCPManifest(
             name="Tally Form Server",
             description="Custom sandboxed Tally MCP server with network access to api.tally.so",
