@@ -66,6 +66,24 @@ Or, if you installed with pip:
 python app.py
 ```
 
+### Run the HTTP API (for the frontend)
+
+```bash
+uv run uvicorn server:app --reload --port 8000
+```
+
+The API loads your `.env` for `OPENAI_API_KEY` and exposes `POST /api/plan` that accepts the same inputs as the CLI (the frontend sends them in camelCase). CORS is open by default; set `ALLOWED_ORIGINS` to a comma-separated list if you want to restrict access.
+
+### Run the frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend expects `VITE_API_BASE_URL` to point to the API (defaults to `http://localhost:8000`). It keeps the loading view visible until the agents finish and displays the real workflow output.
+
 The system will prompt you for:
 - **Event type**: wedding, corporate conference, tech conference, birthday party, gala dinner, workshop, networking event, product launch, charity fundraiser, retreat, etc.
 - **Event name**: Your event's name

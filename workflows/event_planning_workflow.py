@@ -14,9 +14,135 @@ from typing import Dict, Any, List
 import json
 import datetime
 import asyncio
+import sys
 
 # Allow longer agent exchanges (default 10 can be too short for tool-rich agents)
 AGENT_MAX_TURNS = 20
+
+# Canonical JSON schemas the agents must return (used in prompts for consistency)
+AGENT_SCHEMAS = {
+    "planning": {
+        "analysis": "string",
+        "required_agents": ["venue", "catering", "programme", "speakers", "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"],
+        "execution_order_rationale": "string",
+        "special_considerations": ["string"],
+    },
+    "budgeting": {
+        "budget_allocation_recommended": {"category": {"recommended_spend": "number", "pct_of_total": "number", "notes": "string"}},
+        "major_category_breakdowns": {"category": {"recommended_spend": "number", "pct_of_total": "number", "key_assumptions": ["string"]}},
+        "what_if_scenarios": [{"name": "string", "delta": "string", "impact": "string", "recommendation": "string"}],
+        "scenario_recommendation": {"name": "string", "reason": "string"},
+        "allocation_rationale": "string",
+        "warnings": ["string"],
+    },
+    "venue": {
+        "summary": "string",
+        "venues": [{"name": "string", "location": "string", "capacity": "number", "estimated_cost": "string|number", "amenities": ["string"], "availability_notes": "string", "website": "string", "backup_alternatives": ["string"]}],
+        "timeline_and_logistics": ["string"],
+        "top_recommendation": {"option": "string", "rationale": "string", "dependencies": ["string"]},
+    },
+    "catering": {
+        "summary": "string",
+        "menu_overview": ["string"],
+        "dietary_accommodations": ["string"],
+        "budget_estimate": {"per_person": "number", "total": "number", "notes": "string"},
+        "timeline_and_logistics": ["string"],
+    },
+    "programme": {
+        "summary": "string",
+        "programme_recommendations": {
+            "options": [{"name": "string", "description": "string", "capacity": "string|number", "cost": "string|number", "amenities": ["string"], "dependencies": ["string"]}],
+            "timeline_and_logistics": ["string"],
+            "session_and_flow": {"key": "time-range-or-note"},
+            "breaks_networking": ["string"],
+            "technical_and_materials_requirements": ["string"],
+            "contingency_plans": ["string"],
+            "top_recommendation": {"option": "string", "rationale": "string", "dependencies": "string"},
+            "backup_option": {"option": "string", "rationale": "string"},
+        },
+        "next_steps": ["string"],
+    },
+    "speakers": {
+        "summary": "string",
+        "speakers_recommendations": {
+            "primary_objectives": ["string"],
+            "top_speaker_options": [{"name": "string", "bio": "string", "estimated_fee": "string|number", "ideal_role": "string", "logistics": "string", "rationale": "string"}],
+            "honorarium_budget_itemization": {"item": "string|number"},
+            "timeline_logistics": ["string"],
+            "technical_dependencies": ["string"],
+            "other_dependencies": ["string"],
+            "backup_plan": {"virtual_alternative": "string", "local_rising_star": "string"},
+        },
+        "recommendation_rationale": "string",
+    },
+    "activities": {
+        "activity_planning": {
+            "summary": "string",
+            "recommendations": [{"name": "string", "description": "string", "duration": "string|number", "cost_estimate": "string|number", "notes": "string"}],
+            "logistics": ["string"],
+            "budget_estimate": {"total": "number", "breakdown": {"item": "number"}},
+        }
+    },
+    "entertainment": {
+        "entertainment_recommendations": {
+            "summary": "string",
+            "specific_options": [{"name": "string", "description": "string", "cost_estimate": "number", "vendor_notes": "string"}],
+            "budget_estimate": {"total": "number", "breakdown": {"item": "number"}},
+            "recommended_package": {"option": "string", "components": ["string"], "rationale": ["string"]},
+            "timeline_and_logistics": ["string"],
+            "technical_requirements": ["string"],
+            "backup_entertainment_plans": [{"scenario": "string", "plan": "string"}],
+            "dependencies_on_other_areas": ["string"],
+            "top_recommendations_and_rationale": {
+                "recommendation_1": {"choice": "string", "reason": "string"},
+                "recommendation_2": {"choice": "string", "reason": "string"},
+            },
+        }
+    },
+    "communication": {
+        "communication_recommendations": {
+            "overview": "string",
+            "channels": ["string"],
+            "key_messages": ["string"],
+            "timeline": ["string"],
+            "budget_overview": {"total": "number", "breakdown": {"channel": "number"}},
+        }
+    },
+    "scheduling": {
+        "status": "optimal|feasible|infeasible",
+        "optimized_schedule": [{"session_id": "number", "name": "string", "start_time": "HH:MM", "end_time": "HH:MM", "duration": "number", "room": "string", "capacity": "number", "speaker": "string", "expected_attendees": "number"}],
+        "metrics": {"total_duration": "number", "event_ends_at": "HH:MM", "room_utilization": {"room": "pct"}, "conflicts_resolved": "string"},
+        "conflicts_explained": ["string"],
+        "actionable_suggestions": ["string"],
+        "next_steps": ["string"],
+    },
+    "calendar": {
+        "calendar_file_path": "string",
+        "event_summary": "string",
+        "timing_details": "string",
+        "import_instructions": "string",
+    },
+    "form": {
+        "form_url": "string",
+        "status": "success|error",
+        "message": "string|null",
+    },
+    "final_plan": {
+        "executive_summary": "string",
+        "timeline": [{"phase": "string", "tasks": ["string"], "deadline": "YYYY-MM-DD"}],
+        "schedule": {
+            "optimized": "boolean",
+            "sessions": [{"session_id": "number", "name": "string", "start_time": "HH:MM", "end_time": "HH:MM", "duration": "number", "room": "string", "capacity": "number", "speaker": "string", "expected_attendees": "number"}],
+            "metrics": {"total_duration": "string|number", "event_ends_at": "HH:MM", "room_utilization": {"room": "pct"}, "conflicts_resolved": "string"},
+            "status": "optimal|feasible|infeasible",
+        },
+        "budget": {"total_available": "number", "total_allocated": "number", "by_category": {"category": "number"}, "status": "within_budget|over_budget|at_limit"},
+        "recommendations": {"venue": {}, "catering": {}, "programme": {}, "speakers": {}, "communication": {}, "activities": {}, "entertainment": {}, "budgeting": {}, "scheduling": {}},
+        "risks": [{"risk": "string", "severity": "high|medium|low", "mitigation": "string"}],
+        "action_items": [{"action": "string", "owner": "string", "deadline": "string", "priority": "high|medium|low"}],
+        "assumptions": ["string"],
+    },
+}
 
 
 def get_current_date_context() -> str:
@@ -112,13 +238,8 @@ Available specialists:
 - calendar: Calendar invites and ICS file generation
 - form: Online registration/RSVP form creation (auto-generated in Phase 4)
 
-Output your plan as JSON:
-{{
-  "analysis": "Brief analysis of event needs",
-  "required_agents": ["agent1", "agent2", ...],  // In optimal execution order
-  "execution_order_rationale": "Why this order makes sense",
-  "special_considerations": ["consideration1", "consideration2", ...]
-}}
+Return ONLY valid JSON matching this schema:
+{json.dumps(AGENT_SCHEMAS['planning'], indent=2)}
 
 IMPORTANT GUIDELINES:
 - ALWAYS include "budgeting" agent early in the sequence (typically after venue/catering needs are identified)
@@ -224,7 +345,8 @@ Your task:
 
 Required categories for this event: {', '.join([a for a in required_agents if a != 'budgeting' and a not in ['calendar', 'form', 'scheduling']])}
 
-Output comprehensive JSON with budget allocation, scenarios (if applicable), and recommendations."""
+Return ONLY valid JSON matching this schema:
+{json.dumps(AGENT_SCHEMAS['budgeting'], indent=2)}"""
         elif agent_name == "scheduling":
             # Special handling for scheduling agent
             specialist_prompt = f"""You are the Advanced Scheduling specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
@@ -253,7 +375,8 @@ Input format for optimize_schedule:
 
 If scheduling is infeasible, explain conflicts and provide actionable suggestions.
 
-Output comprehensive JSON with optimized schedule, metrics, and any conflict resolutions."""
+Return ONLY valid JSON matching this schema:
+{json.dumps(AGENT_SCHEMAS['scheduling'], indent=2)}"""
         else:
             # Add budget context if budgeting agent has run
             budget_context = ""
@@ -275,7 +398,8 @@ Provide detailed, actionable recommendations for {agent_name}, including:
 - Top recommendations with rationale
 - Any dependencies on other areas
 
-Output structured JSON with your recommendations."""
+Return ONLY valid JSON matching this schema:
+{json.dumps(AGENT_SCHEMAS.get(agent_name, {}), indent=2)}"""
 
         _ensure_loop()
         result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
@@ -340,42 +464,8 @@ Your task for PHASE 3 - FINALIZATION:
    - Prioritized action items with deadlines
    - Assumptions made
 
-4. OUTPUT as valid JSON:
-{{
-  "executive_summary": "...",
-  "timeline": [
-    {{"phase": "...", "tasks": [...], "deadline": "..."}}
-  ],
-  "schedule": {{
-    "optimized": true/false,
-    "sessions": [...],  // REQUIRED if scheduling agent was used
-    "metrics": {{
-      "total_duration": "...",
-      "event_ends_at": "...",
-      "room_utilization": {{}},
-      "conflicts_resolved": "..."
-    }},
-    "status": "optimal | feasible | infeasible"  // from scheduling agent output
-  }},
-  "budget": {{
-    "total_available": "...",
-    "total_allocated": "...",
-    "by_category": {{}},
-    "status": "within_budget | over_budget | at_limit"
-  }},
-  "recommendations": {{
-    "venue": {{}},
-    "catering": {{}},
-    ...
-  }},
-  "risks": [
-    {{"risk": "...", "severity": "high|medium|low", "mitigation": "..."}}
-  ],
-  "action_items": [
-    {{"action": "...", "owner": "...", "deadline": "...", "priority": "high|medium|low"}}
-  ],
-  "assumptions": [...]
-}}
+4. OUTPUT as valid JSON matching this schema:
+{json.dumps(AGENT_SCHEMAS['final_plan'], indent=2)}
 
 Use handoffs if needed to refine or add information. Then provide your final synthesized plan."""
 
@@ -432,7 +522,10 @@ Output JSON with:
 - calendar_file_path
 - event_summary
 - timing_details
-- import_instructions"""
+- import_instructions
+
+Return ONLY valid JSON matching this schema:
+{json.dumps(AGENT_SCHEMAS['calendar'], indent=2)}"""
 
     _ensure_loop()
     calendar_result = Runner.run_sync(calendar_agent, calendar_prompt, max_turns=AGENT_MAX_TURNS)
@@ -465,7 +558,7 @@ Output JSON with:
         f"Create an RSVP/registration form for '{event_details.get('event_name')}'.\n\n"
         f"Essentials: {json.dumps(concise_event, indent=2)}\n\n"
         f"Guidelines: {json.dumps(minimal_context, indent=2)}\n\n"
-        "Return ONLY valid JSON with: {\"form_url\": \"https://tally.so/r/xxxxx\", \"status\": \"success\"}."
+        f"Return ONLY valid JSON matching this schema:\n{json.dumps(AGENT_SCHEMAS['form'], indent=2)}"
     )
 
     # Create the form via shared helper (handles retries/backoff)
@@ -534,45 +627,51 @@ Output JSON with:
     
     # Ask user if they want to send SMS
     try:
-        send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
-        
-        if send_sms in ['yes', 'y', 'true', '1']:
-            print("Sending SMS notification...\n")
-            
-            try:
-                from twilio.rest import Client
-                
-                # Twilio credentials
-                account_sid = 'ACad1d89daf3c3b29db84f0714eeadb6cb'
-                auth_token = '2a20c86b0ed50623d61b9404f85a6281'
-                client = Client(account_sid, auth_token)
-                
-                # Create SMS body with Tally form
-                event_name = event_details.get('event_name', 'Event')
-                event_date = event_details.get('event_date', 'TBD')
-                form_url = form_data.get('form_url', 'Form link available soon')
-                
-                sms_body = f"Hey! You're invited to {event_name} on {event_date}. RSVP: {form_url}"
-                
-                # Send SMS
-                message = client.messages.create(
-                    from_='+15075955374',
-                    body=sms_body,
-                    to='+41784018164'
-                )
-                
-                print(f"✅ SMS sent successfully! Message SID: {message.sid}\n")
-                sms_sent = True
-                sms_message_sid = message.sid
-                
-            except Exception as sms_error:
-                print(f"⚠️  Failed to send SMS: {sms_error}\n")
-                sms_sent = False
-                sms_message_sid = None
-        else:
-            print("SMS notification skipped.\n")
+        # Avoid blocking in non-interactive environments (e.g., HTTP API)
+        if sys.stdin is None or not sys.stdin.isatty():
+            print("SMS notification skipped (non-interactive environment).\n")
             sms_sent = False
             sms_message_sid = None
+        else:
+            send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
+            
+            if send_sms in ['yes', 'y', 'true', '1']:
+                print("Sending SMS notification...\n")
+                
+                try:
+                    from twilio.rest import Client
+                    
+                    # Twilio credentials
+                    account_sid = 'ACad1d89daf3c3b29db84f0714eeadb6cb'
+                    auth_token = '2a20c86b0ed50623d61b9404f85a6281'
+                    client = Client(account_sid, auth_token)
+                    
+                    # Create SMS body with Tally form
+                    event_name = event_details.get('event_name', 'Event')
+                    event_date = event_details.get('event_date', 'TBD')
+                    form_url = form_data.get('form_url', 'Form link available soon')
+                    
+                    sms_body = f"Hey! You're invited to {event_name} on {event_date}. RSVP: {form_url}"
+                    
+                    # Send SMS
+                    message = client.messages.create(
+                        from_='+15075955374',
+                        body=sms_body,
+                        to='+41784018164'
+                    )
+                    
+                    print(f"✅ SMS sent successfully! Message SID: {message.sid}\n")
+                    sms_sent = True
+                    sms_message_sid = message.sid
+                    
+                except Exception as sms_error:
+                    print(f"⚠️  Failed to send SMS: {sms_error}\n")
+                    sms_sent = False
+                    sms_message_sid = None
+            else:
+                print("SMS notification skipped.\n")
+                sms_sent = False
+                sms_message_sid = None
             
     except Exception as e:
         print(f"⚠️  SMS input error: {e}\n")
