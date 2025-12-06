@@ -25,7 +25,7 @@ class TallyMCPServer:
         """Create a Tally form via API (two-step: create blank, then add blocks)."""
         
         # Step 1: Create a blank form with empty blocks
-        print(f"📝 Step 1: Creating blank form...", file=sys.stderr)
+        print(f" Step 1: Creating blank form...", file=sys.stderr)
         create_url = f"{self.base_url}/forms"
         create_data = {
             "status": "BLANK",

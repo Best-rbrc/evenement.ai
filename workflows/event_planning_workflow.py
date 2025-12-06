@@ -26,7 +26,8 @@ SANDBOX_DIR = Path("/tmp/mcp_event_outputs")
 PROJECT_OUTPUT_DIR = Path(__file__).parent.parent / "event_outputs"
 SANDBOX_ENABLED = True  # Set to False to disable sandboxing
 USE_SANDBOXED_FORMS = None  # Will be set by user preference
-SANDBOX_ENABLED = False  # Set to False to disable sandboxing
+SKIP_FORM_CREATION = False  # Allows headless runs to bypass form generation
+
 
 # Canonical JSON schemas - agents MUST return outputs matching these exact structures
 AGENT_SCHEMAS = {
@@ -850,7 +851,11 @@ Output JSON with:
     print("✅ Calendar invite generated!\n")
     
     # Create registration form
-    print("Creating event registration form...\n")
+    if SKIP_FORM_CREATION:
+        print("⏭️  Skipping registration form creation (headless mode)\n")
+        form_data = {"status": "skipped", "form_url": None, "message": "Form creation skipped"}
+    else:
+        print("Creating event registration form...\n")
     
     # Compact prompt to reduce tokens: only essentials
     concise_event = {
@@ -871,32 +876,32 @@ Output JSON with:
     if "programme" in specialist_outputs:
         minimal_context["programme"] = "optional session preferences"
 
-    form_prompt = (
-        f"Create an RSVP/registration form for '{event_details.get('event_name')}'.\n\n"
-        f"Essentials: {json.dumps(concise_event, indent=2)}\n\n"
-        f"Guidelines: {json.dumps(minimal_context, indent=2)}\n\n"
-        "Return ONLY valid JSON with: {\"form_url\": \"https://tally.so/r/xxxxx\", \"status\": \"success\"}."
-    )
+        form_prompt = (
+            f"Create an RSVP/registration form for '{event_details.get('event_name')}'.\n\n"
+            f"Essentials: {json.dumps(concise_event, indent=2)}\n\n"
+            f"Guidelines: {json.dumps(minimal_context, indent=2)}\n\n"
+            "Return ONLY valid JSON with: {\"form_url\": \"https://tally.so/r/xxxxx\", \"status\": \"success\"}."
+        )
 
-    # Create the form via shared helper (handles retries/backoff)
-    # Pass sandboxed Tally server if enabled
-    from custom_agents.form_agent import extract_form_url_from_output, run_form_with_retries
+        # Create the form via shared helper (handles retries/backoff)
+        # Pass sandboxed Tally server if enabled
+        from custom_agents.form_agent import extract_form_url_from_output, run_form_with_retries
 
-    form_result, form_error = run_form_with_retries(form_prompt, mcp_servers=tally_server if SANDBOX_ENABLED else None)
+        form_result, form_error = run_form_with_retries(form_prompt, mcp_servers=tally_server if SANDBOX_ENABLED else None)
 
-    # Extract form URL from output; on failure, surface the error instead of generating a local fallback
-    form_data = extract_form_url_from_output(form_result.final_output if form_result else "")
+        # Extract form URL from output; on failure, surface the error instead of generating a local fallback
+        form_data = extract_form_url_from_output(form_result.final_output if form_result else "")
 
-    if form_data.get("status") == "success":
-        print(f"✅ Registration form created: {form_data.get('form_url')}\n")
-    else:
-        error_message = form_error or form_data.get("message") or "Unknown error during form creation"
-        print(f"⚠️  Remote form creation failed. Error: {error_message}\n")
-        form_data = {
-            "status": "error",
-            "message": error_message,
-            "raw_output": form_data.get("raw_output")
-        }
+        if form_data.get("status") == "success":
+            print(f"✅ Registration form created: {form_data.get('form_url')}\n")
+        else:
+            error_message = form_error or form_data.get("message") or "Unknown error during form creation"
+            print(f"⚠️  Remote form creation failed. Error: {error_message}\n")
+            form_data = {
+                "status": "error",
+                "message": error_message,
+                "raw_output": form_data.get("raw_output")
+            }
     
     # ============================================================
     # PHASE 5: PDF REPORT GENERATION
