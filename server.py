@@ -56,6 +56,8 @@ class EventRequest(BaseModel):
     guestCountMin: int = Field(..., description="Minimum expected attendees")
     guestCountMax: int = Field(..., description="Maximum expected attendees")
     specialRequirements: str = Field("", description="Free-text requirements or themes")
+    enableSandbox: Optional[bool] = Field(False, description="Enable sandboxed form creation")
+    enableSMS: Optional[bool] = Field(False, description="Enable SMS notifications")
 
     model_config = {"populate_by_name": True, "extra": "allow"}
 
@@ -120,6 +122,11 @@ async def create_plan(payload: EventRequest) -> PlanResponse:
     # Map incoming payload to the existing workflow schema
     event_details = map_request_to_workflow_payload(payload)
 
+    # Set non-interactive mode and dev settings for API calls
+    os.environ["EVENT_PLANNER_NON_INTERACTIVE"] = "1"
+    os.environ["EVENT_PLANNER_ENABLE_SANDBOX"] = "1" if payload.enableSandbox else "0"
+    os.environ["EVENT_PLANNER_ENABLE_SMS"] = "1" if payload.enableSMS else "0"
+    
     # Run the long-running workflow in a worker thread to avoid blocking the loop
     try:
         result = await asyncio.to_thread(run_event_planning, event_details)

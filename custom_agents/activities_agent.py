@@ -28,9 +28,9 @@ def create_activities_agent() -> Agent:
         {
           "activity_planning": {
             "summary": "str",
-            "recommendations": [{"name": "str", "description": "str", "duration": "str", "cost_estimate": 0, "notes": "str"}],
+            "recommendations": [{"name": "str", "description": "str", "duration": "str", "cost_estimate":  "str", "notes": "str"}],
             "logistics": ["str"],
-            "budget_estimate": {"total": 0, "breakdown": {"item": 0}}
+            "budget_estimate": {"total": "str", "breakdown": {"item":  "str"}}
           }
         }
         """
