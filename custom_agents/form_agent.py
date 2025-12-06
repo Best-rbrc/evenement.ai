@@ -134,8 +134,11 @@ async def _run_form_once(prompt: str, form_model_env: str = "FORM_MODEL"):
         agent = create_form_agent()
         servers = getattr(agent, "mcp_servers", []) or []
         if servers:
+            # Explicitly connect each server before running
             async with contextlib.AsyncExitStack() as stack:
                 for server in servers:
+                    # Connect the server explicitly
+                    await server.connect()
                     await stack.enter_async_context(server)
                 result = await Runner.run(agent, prompt)
                 return result
