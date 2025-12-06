@@ -109,15 +109,17 @@ def create_specialized_agents(required_agents: List[str], mcp_servers=None) -> D
     
     Args:
         required_agents: List of agent type names to create
-        mcp_servers: Optional MCPServers instance to pass to agents that support it (e.g., calendar)
+        mcp_servers: Optional MCPServers instance to pass to agents that handle external data:
+                    - calendar: sandboxed calendar file writing
+                    - form: sandboxed form data handling from external sources
     """
     agents = {}
     
     for agent_type in required_agents:
         if agent_type in AGENT_CREATORS:
             creator = AGENT_CREATORS[agent_type]
-            # Pass mcp_servers to calendar agent if available
-            if agent_type == "calendar" and mcp_servers is not None:
+            # Pass mcp_servers to agents that handle external/user input data
+            if agent_type in ("calendar", "form") and mcp_servers is not None:
                 agents[agent_type] = creator(mcp_servers=mcp_servers)
             else:
                 agents[agent_type] = creator()
