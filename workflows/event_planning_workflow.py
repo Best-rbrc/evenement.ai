@@ -525,6 +525,60 @@ Output JSON with:
         pdf_path = None
         pdf_generated = False
     
+    # ============================================================
+    # PHASE 6: SMS NOTIFICATION (OPTIONAL)
+    # ============================================================
+    print(f"\n{'='*60}")
+    print("📱 PHASE 6: SMS Notification")
+    print(f"{'='*60}\n")
+    
+    # Ask user if they want to send SMS
+    try:
+        send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
+        
+        if send_sms in ['yes', 'y', 'true', '1']:
+            print("Sending SMS notification...\n")
+            
+            try:
+                from twilio.rest import Client
+                
+                # Twilio credentials
+                account_sid = 'TWILIO_ACCOUNT_SID_REMOVED'
+                auth_token = 'TWILIO_AUTH_TOKEN_REMOVED'
+                client = Client(account_sid, auth_token)
+                
+                # Create SMS body with Tally form
+                event_name = event_details.get('event_name', 'Event')
+                event_date = event_details.get('event_date', 'TBD')
+                form_url = form_data.get('form_url', 'Form link available soon')
+                
+                sms_body = f"Hey! You're invited to {event_name} on {event_date}. RSVP: {form_url}"
+                
+                # Send SMS
+                message = client.messages.create(
+                    from_='+10000000000',
+                    body=sms_body,
+                    to='+10000000000'
+                )
+                
+                print(f"✅ SMS sent successfully! Message SID: {message.sid}\n")
+                sms_sent = True
+                sms_message_sid = message.sid
+                
+            except Exception as sms_error:
+                print(f"⚠️  Failed to send SMS: {sms_error}\n")
+                sms_sent = False
+                sms_message_sid = None
+        else:
+            print("SMS notification skipped.\n")
+            sms_sent = False
+            sms_message_sid = None
+            
+    except Exception as e:
+        print(f"⚠️  SMS input error: {e}\n")
+        sms_sent = False
+        sms_message_sid = None
+    
     # Return comprehensive results
     return {
         "event_details": event_details,
@@ -536,7 +590,9 @@ Output JSON with:
         "pdf_report": pdf_path,
         "agents_used": required_agents + ["calendar", "form"],
         "success": True,
-        "pdf_generated": pdf_generated
+        "pdf_generated": pdf_generated,
+        "sms_sent": sms_sent,
+        "sms_message_sid": sms_message_sid
     }
 
 
