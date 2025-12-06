@@ -1,5 +1,4 @@
 from agents import Agent, function_tool, WebSearchTool
-from config import AGENT_SPECIALIZATIONS
 
 @function_tool
 def search_venues(location: str, capacity: int, event_type: str, budget_range: str) -> str:

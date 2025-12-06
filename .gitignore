@@ -1,16 +1,27 @@
 # Environment & OS
 .env
+.env.local
 .DS_Store
+*.swp
+*.swo
 
 # Python caches
 __pycache__/
 *.py[cod]
+*.so
+
+# Python packaging
+*.egg-info/
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.vscode/
 
 # Event outputs
 event_outputs/
 
-# Tools
-tools/__pycache__/
-workflows/__pycache__/
-custom_agents/__pycache__/
-custom_agents/archive/__pycache__/
+# Package build cache
+.uv/

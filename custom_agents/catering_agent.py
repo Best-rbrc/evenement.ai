@@ -1,5 +1,4 @@
 from agents import Agent, function_tool, WebSearchTool
-from config import AGENT_SPECIALIZATIONS
 
 
 @function_tool
