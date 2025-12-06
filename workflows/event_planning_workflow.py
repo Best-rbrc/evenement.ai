@@ -439,8 +439,6 @@ Output JSON with:
     # Create registration form
     print("Creating event registration form...\n")
     
-    form_agent = all_specialists["form"]  # Kept for consistency, but we'll manage a fresh MCP context per attempt
-
     # Compact prompt to reduce tokens: only essentials
     concise_event = {
         "event_name": event_details.get("event_name"),

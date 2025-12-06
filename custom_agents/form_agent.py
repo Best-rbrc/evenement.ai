@@ -14,6 +14,7 @@ def create_form_agent() -> Agent:
     Returns:
         Agent configured to create event registration forms using Tally MCP tools
     """
+
     tally_server = MCPServerStdio({
         "command": "npx",
         "args": [
@@ -23,6 +24,14 @@ def create_form_agent() -> Agent:
             f"Authorization: Bearer {os.getenv('TALLY_API_KEY', '')}",
         ],
     })
+    # Ensure the server is connected before use
+    if hasattr(tally_server, "connect"):
+        connect_method = getattr(tally_server, "connect")
+        if callable(connect_method):
+            try:
+                connect_method()
+            except Exception:
+                pass  # Fail silently if connect() is async or fails
 
     # Configure model with rate limit friendly settings
     model_settings = ModelSettings(

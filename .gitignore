@@ -1,14 +1,16 @@
+# Environment & OS
 .env
-
-# Python cache files
-*.py[cod]
-**/__pycache__/
-
-# OS files
 .DS_Store
 
-# Tool-specific caches
-/tools/__pycache__/
-/workflows/__pycache__/
-/custom_agents/__pycache__/
-/custom_agents/archive/__pycache__/
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Event outputs
+event_outputs/
+
+# Tools
+tools/__pycache__/
+workflows/__pycache__/
+custom_agents/__pycache__/
+custom_agents/archive/__pycache__/
