@@ -28,7 +28,6 @@ SANDBOX_ENABLED = True  # Set to False to disable sandboxing
 USE_SANDBOXED_FORMS = None  # Will be set by user preference
 SKIP_FORM_CREATION = False  # Allows headless runs to bypass form generation
 
-
 # Canonical JSON schemas - agents MUST return outputs matching these exact structures
 AGENT_SCHEMAS = {
     "planning": {
@@ -396,33 +395,46 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     print(f"Date Context: {get_current_date_context()}")
     print(f"{'='*60}\n")
     
-    # Ask user preference for form creation method
+    # Ask user preference for form creation method (only in interactive mode)
     global USE_SANDBOXED_FORMS
-    if USE_SANDBOXED_FORMS is None:
-        print("\n📋 FORM CREATION METHOD SELECTION")
-        print("-" * 60)
-        print("How would you like to create registration forms?\n")
-        print("1. Sandboxed (Recommended) - Custom local MCP in Docker sandbox")
-        print("   ✅ Runs in isolated container")
-        print("   ✅ Network-restricted (api.tally.so only)")
-        print("   ✅ Uses Tally REST API directly\n")
-        print("2. Unsandboxed - Official Tally mcp-remote server")
-        print("   ⚠️  No sandboxing (direct system access)")
-        print("   ⚠️  OAuth2 authentication (may have issues)")
-        print("   ⚠️  External npm package dependency\n")
-        
-        while True:
-            choice = input("Enter your choice (1 or 2): ").strip()
-            if choice == "1":
-                USE_SANDBOXED_FORMS = True
-                print("\n✅ Using sandboxed local MCP server for forms\n")
-                break
-            elif choice == "2":
-                USE_SANDBOXED_FORMS = False
-                print("\n✅ Using unsandboxed Tally mcp-remote for forms\n")
-                break
-            else:
-                print("⚠️  Invalid choice. Please enter 1 or 2.\n")
+    # Skip prompt if already set or running non-interactively
+    is_non_interactive = os.environ.get("EVENT_PLANNER_NON_INTERACTIVE") == "1"
+    
+    # Check if dev settings override is provided
+    if is_non_interactive and os.environ.get("EVENT_PLANNER_ENABLE_SANDBOX"):
+        USE_SANDBOXED_FORMS = os.environ.get("EVENT_PLANNER_ENABLE_SANDBOX") == "1"
+        mode_text = "sandboxed (Docker)" if USE_SANDBOXED_FORMS else "unsandboxed (mcp-remote)"
+        print(f"\n✅ Dev settings: Using {mode_text} for forms\n")
+    elif USE_SANDBOXED_FORMS is None and not is_non_interactive:
+        try:
+            print("\n📋 FORM CREATION METHOD SELECTION")
+            print("-" * 60)
+            print("How would you like to create registration forms?\n")
+            print("1. Sandboxed (Recommended) - Custom local MCP in Docker sandbox")
+            print("   ✅ Runs in isolated container")
+            print("   ✅ Network-restricted (api.tally.so only)")
+            print("   ✅ Uses Tally REST API directly\n")
+            print("2. Unsandboxed - Official Tally mcp-remote server")
+            print("   ⚠️  No sandboxing (direct system access)")
+            print("   ⚠️  OAuth2 authentication (may have issues)")
+            print("   ⚠️  External npm package dependency\n")
+            
+            while True:
+                choice = input("Enter your choice (1 or 2): ").strip()
+                if choice == "1":
+                    USE_SANDBOXED_FORMS = True
+                    print("\n✅ Using sandboxed local MCP server for forms\n")
+                    break
+                elif choice == "2":
+                    USE_SANDBOXED_FORMS = False
+                    print("\n✅ Using unsandboxed Tally mcp-remote for forms\n")
+                    break
+                else:
+                    print("⚠️  Invalid choice. Please enter 1 or 2.\n")
+        except (EOFError, OSError):
+            # Non-interactive mode (e.g., API call) - use default
+            USE_SANDBOXED_FORMS = False
+            print("\n✅ Non-interactive mode: Using unsandboxed Tally mcp-remote for forms\n")
 
     # ============================================================
     # PHASE 1: COORDINATOR PLANNING
@@ -952,10 +964,24 @@ Output JSON with:
     print("📱 PHASE 6: SMS Notification")
     print(f"{'='*60}\n")
     
-    # Ask user if they want to send SMS
-    try:
-        send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
+    # Ask user if they want to send SMS (skip in non-interactive mode)
+    is_non_interactive = os.environ.get("EVENT_PLANNER_NON_INTERACTIVE") == "1"
+    
+    if is_non_interactive:
+        # Check dev settings override
+        enable_sms = os.environ.get("EVENT_PLANNER_ENABLE_SMS") == "1"
+        send_sms = 'yes' if enable_sms else 'no'
+        status = "enabled" if enable_sms else "disabled"
+        print(f"✅ Dev settings: SMS notification {status}\n")
+    else:
+        try:
+            send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
+        except (EOFError, OSError):
+            # Non-interactive mode - skip SMS by default
+            send_sms = 'no'
+            print("✅ Non-interactive mode: Skipping SMS notification\n")
         
+    try:
         if send_sms in ['yes', 'y', 'true', '1']:
             print("Sending SMS notification...\n")
             
