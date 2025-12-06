@@ -1,9 +1,14 @@
+import asyncio
 import os
 import json
 import re
+import time
+import random
+import contextlib
 from agents import Agent
 from agents.mcp import MCPServerStdio
 from agents.model_settings import ModelSettings
+from agents import Runner
 
 TALLY_MCP_URL = "https://api.tally.so/mcp"
 
@@ -29,7 +34,15 @@ def create_form_agent() -> Agent:
         connect_method = getattr(tally_server, "connect")
         if callable(connect_method):
             try:
-                connect_method()
+                # Handle both sync and async connect implementations without warnings
+                if asyncio.iscoroutinefunction(connect_method):
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(connect_method())
+                    else:
+                        loop.run_until_complete(connect_method())
+                else:
+                    connect_method()
             except Exception:
                 pass  # Fail silently if connect() is async or fails
 
@@ -98,3 +111,75 @@ def extract_form_url_from_output(output: str) -> dict:
         "message": "Could not extract form URL from output",
         "raw_output": output
     }
+
+
+async def _run_form_once(prompt: str, form_model_env: str = "FORM_MODEL"):
+    """Run the form agent once, respecting optional model override, ensuring MCP servers are connected."""
+    prev_model = os.environ.get("OPENAI_MODEL")
+    form_model = os.environ.get(form_model_env)
+    if form_model:
+        os.environ["OPENAI_MODEL"] = form_model
+    try:
+        agent = create_form_agent()
+        servers = getattr(agent, "mcp_servers", []) or []
+        if servers:
+            async with contextlib.AsyncExitStack() as stack:
+                for server in servers:
+                    await stack.enter_async_context(server)
+                result = await Runner.run(agent, prompt)
+                return result
+        # Fallback if no servers are attached
+        return await Runner.run(agent, prompt)
+    finally:
+        if form_model:
+            if prev_model is None:
+                os.environ.pop("OPENAI_MODEL", None)
+            else:
+                os.environ["OPENAI_MODEL"] = prev_model
+
+
+def run_form_with_retries(prompt: str, max_retries: int = 5) -> tuple[object, str | None]:
+    """Run the form agent with simple backoff for transient MCP issues.
+
+    Returns a tuple of (result, last_error_text). The caller can decide how to handle failures.
+    """
+    form_result = None
+    last_exc_text = None
+
+    for attempt in range(max_retries):
+        try:
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            if loop.is_running():
+                form_result = loop.create_task(_run_form_once(prompt))
+                return form_result, None
+
+            form_result = loop.run_until_complete(_run_form_once(prompt))
+            break
+        except Exception as e:
+            last_exc_text = str(e)
+            is_transient = (
+                "rate_limit" in last_exc_text.lower()
+                or "StreamableHTTPError" in last_exc_text
+                or "SSE" in last_exc_text
+                or " 524" in last_exc_text
+            )
+            if is_transient and attempt < max_retries - 1:
+                base_wait = 2 ** attempt
+                reason = "rate limit" if "rate_limit" in last_exc_text.lower() else "remote connection"
+                wait_time = max(5.0, min(30.0, base_wait * 1.5))
+                wait_time += random.uniform(0.5, 1.2)
+                print(f"⏳ Transient {reason} issue. Waiting {wait_time:.2f}s before retry...\n")
+                time.sleep(wait_time)
+                continue
+            break
+
+    if form_result is not None:
+        return form_result, last_exc_text
+
+    # Fallback error object to keep downstream logic stable
+    return type('obj', (object,), {'final_output': '{"status": "error", "message": "Form creation failed"}'})(), last_exc_text

@@ -15,6 +15,9 @@ import json
 import datetime
 import asyncio
 
+# Allow longer agent exchanges (default 10 can be too short for tool-rich agents)
+AGENT_MAX_TURNS = 20
+
 
 def get_current_date_context() -> str:
     """Get current date context for agents."""
@@ -141,7 +144,7 @@ IMPORTANT GUIDELINES:
         for attempt in range(max_retries):
             try:
                 _ensure_loop()
-                return Runner.run_sync(agent, prompt)
+                return Runner.run_sync(agent, prompt, max_turns=AGENT_MAX_TURNS)
             except Exception as e:
                 last_exc = e
                 msg = str(e)
@@ -275,7 +278,7 @@ Provide detailed, actionable recommendations for {agent_name}, including:
 Output structured JSON with your recommendations."""
 
         _ensure_loop()
-        result = Runner.run_sync(agent, specialist_prompt)
+        result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
         specialist_outputs[agent_name] = result.final_output
         
         print(f"✓ Complete\n")
@@ -432,7 +435,7 @@ Output JSON with:
 - import_instructions"""
 
     _ensure_loop()
-    calendar_result = Runner.run_sync(calendar_agent, calendar_prompt)
+    calendar_result = Runner.run_sync(calendar_agent, calendar_prompt, max_turns=AGENT_MAX_TURNS)
     
     print("✅ Calendar invite generated!\n")
     
@@ -465,140 +468,24 @@ Output JSON with:
         "Return ONLY valid JSON with: {\"form_url\": \"https://tally.so/r/xxxxx\", \"status\": \"success\"}."
     )
 
-    # Helper: run the form step with a dedicated MCP stdio context (mirrors your working script)
-    async def _run_form_once(prompt: str):
-        import os
-        import re
-        import json as _json
-        from agents import Agent as _Agent, Runner as _Runner
-        from agents.mcp import MCPServerStdio as _MCPServerStdio
-        from agents.model_settings import ModelSettings as _ModelSettings
+    # Create the form via shared helper (handles retries/backoff)
+    from custom_agents.form_agent import extract_form_url_from_output, run_form_with_retries
 
-        tally = _MCPServerStdio({
-            "command": "npx",
-            "args": [
-                "mcp-remote",
-                "https://api.tally.so/mcp",
-                "--header", f"Authorization: Bearer {os.getenv('TALLY_API_KEY','')}",
-            ],
-        })
+    form_result, form_error = run_form_with_retries(form_prompt)
 
-        model_settings = _ModelSettings(max_tokens=4000, temperature=0.7)
-
-        agent = _Agent(
-            name="Tally Form Agent",
-            instructions=(
-                "Use the Tally MCP tools to create an RSVP/registration form. "
-                "After successful form creation, return ONLY valid JSON: "
-                '{"form_url": "https://tally.so/r/xxxxx", "status": "success"}. '
-                "No extra text or markdown."
-            ),
-            mcp_servers=[tally],
-            model_settings=model_settings,
-        )
-
-        # Allow overriding the model used for this step via env FORM_MODEL
-        # If supported by the SDK, it will read the OPENAI_MODEL env var.
-        prev_model = os.environ.get("OPENAI_MODEL")
-        form_model = os.environ.get("FORM_MODEL")
-        if form_model:
-            os.environ["OPENAI_MODEL"] = form_model
-        try:
-            async with tally:
-                result = await _Runner.run(agent, prompt)
-        finally:
-            # Restore previous model env to avoid side effects on other steps
-            if form_model is not None:
-                if prev_model is None:
-                    os.environ.pop("OPENAI_MODEL", None)
-                else:
-                    os.environ["OPENAI_MODEL"] = prev_model
-            return result
-
-    # Retry logic for transient errors (rate limits, remote SSE timeouts)
-    max_retries = 5
-    form_result = None
-    
-    for attempt in range(max_retries):
-        try:
-            _ensure_loop()
-            # Prefer the managed-context path which reliably opens/closes the MCP stdio bridge
-            loop = asyncio.get_event_loop()
-            form_result = loop.run_until_complete(_run_form_once(form_prompt))
-            break
-        except Exception as e:
-            err_text = str(e)
-            is_transient = (
-                "rate_limit" in err_text.lower()
-                or "StreamableHTTPError" in err_text
-                or "SSE" in err_text
-                or " 524" in err_text
-            )
-            if is_transient and attempt < max_retries - 1:
-                import time, random, re
-                # Start with exponential backoff
-                base_wait = 2 ** attempt
-                reason = "rate limit" if "rate_limit" in err_text.lower() else "remote connection"
-                # Parse server-provided wait hint: "Please try again in Xs"
-                match = re.search(r"Please try again in\s+([0-9]+\.?[0-9]*)s", err_text)
-                if match:
-                    try:
-                        base_wait = float(match.group(1))
-                    except Exception:
-                        pass
-                # Apply a multiplier and clamp to a sensible range
-                wait_time = max(5.0, min(30.0, base_wait * 1.5))
-                # Add jitter to avoid thundering herd
-                wait_time += random.uniform(0.5, 1.2)
-                print(f"⏳ Transient {reason} issue. Waiting {wait_time:.2f}s before retry...\n")
-                time.sleep(wait_time)
-                continue
-            else:
-                print(f"⚠️  Form creation error: {e}\n")
-                form_result = type('obj', (object,), {'final_output': '{"status": "error", "message": "Form creation failed"}'})()
-                break
-    
-    # Extract form URL from output; on failure, create a local fallback schema
-    from custom_agents.form_agent import extract_form_url_from_output
+    # Extract form URL from output; on failure, surface the error instead of generating a local fallback
     form_data = extract_form_url_from_output(form_result.final_output if form_result else "")
 
     if form_data.get("status") == "success":
         print(f"✅ Registration form created: {form_data.get('form_url')}\n")
     else:
-        print(f"⚠️  Remote form creation had issues. Generating local fallback schema...\n")
-        try:
-            import os, json as _json
-            os.makedirs("event_outputs", exist_ok=True)
-            # Minimal, useful form schema based on available details
-            fallback_schema = {
-                "title": f"Registration — {event_details.get('event_name','Event')}",
-                "fields": [
-                    {"id": "name", "label": "Full Name", "type": "text", "required": True},
-                    {"id": "email", "label": "Email", "type": "email", "required": True},
-                    {"id": "attendance", "label": "Will you attend?", "type": "select", "options": ["Yes", "No"], "required": True},
-                    {"id": "affiliation", "label": "Affiliation / Company", "type": "text", "required": False},
-                    {"id": "dietary", "label": "Dietary Restrictions", "type": "text", "required": False},
-                    {"id": "accessibility", "label": "Accessibility Needs", "type": "text", "required": False}
-                ],
-                "event": {
-                    "name": event_details.get('event_name'),
-                    "type": event_details.get('event_type'),
-                    "date": event_details.get('event_date'),
-                    "location": event_details.get('location_preference')
-                }
-            }
-            safe_event_name = "".join(c for c in event_details.get('event_name','event') if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
-            fallback_path = os.path.join("event_outputs", f"registration_form_{safe_event_name}.json")
-            with open(fallback_path, "w", encoding="utf-8") as f:
-                f.write(_json.dumps(fallback_schema, indent=2))
-            form_data = {
-                "status": "deferred",
-                "message": "Remote form creation failed due to rate limits/connection. Local form schema generated.",
-                "local_schema_path": fallback_path
-            }
-            print(f"✅ Local form schema saved: {fallback_path}\n")
-        except Exception as _e:
-            print(f"⚠️  Failed to write local form schema: {_e}\n")
+        error_message = form_error or form_data.get("message") or "Unknown error during form creation"
+        print(f"⚠️  Remote form creation failed. Error: {error_message}\n")
+        form_data = {
+            "status": "error",
+            "message": error_message,
+            "raw_output": form_data.get("raw_output")
+        }
     
     # ============================================================
     # PHASE 5: PDF REPORT GENERATION
