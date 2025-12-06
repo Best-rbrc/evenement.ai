@@ -448,6 +448,24 @@ def create_budgeting_agent() -> Agent:
         - Document all assumptions in scenarios
         
         Be proactive: If you see budget conflicts in specialist outputs, immediately run scenarios to find solutions.
+        
+        CRITICAL OUTPUT REQUIREMENTS:
+        1. Return ONLY a valid JSON object - NO markdown, NO code blocks, NO explanations
+        2. Ensure ALL required fields are present
+        3. Use numbers (not strings) for numeric values
+        4. NO trailing commas in JSON
+        5. Validate JSON syntax before returning
+        
+        REQUIRED STRUCTURE:
+        {
+          "budget_allocation_recommended": {"venue": {"recommended_spend": 3000, "pct_of_total": 0.30, "notes": "Primary cost driver"}, "catering": {"recommended_spend": 2500, "pct_of_total": 0.25, "notes": "Per-person costs"}},
+          "major_category_breakdowns": {"venue": {"recommended_spend": 3000, "pct_of_total": 0.30, "key_assumptions": ["Venue includes AV", "100 guests"]}},
+          "what_if_scenarios": [{"name": "Scenario 1", "delta": "+15% budget", "impact": "Allows premium venue", "recommendation": "If funds available"}],
+          "scenario_recommendation": {"name": "Base case", "reason": "Balanced allocation"},
+          "allocation_rationale": "Based on industry standards and priorities",
+          "warnings": []
+        }
+        ALWAYS include budget_allocation_recommended - this is CRITICAL.
         """,
         tools=[
             calculate_budget_allocation,

@@ -39,6 +39,49 @@ def create_programme_agent() -> Agent:
         
         Always consider attendee engagement, speaker needs, and logistical constraints.
         Use the available tools to create schedules, plan sessions, and coordinate breaks.
+        
+        CRITICAL OUTPUT REQUIREMENTS:
+        1. Return ONLY a valid JSON object - NO markdown, NO code blocks, NO explanations
+        2. Ensure ALL required fields are present
+        3. Use proper JSON types (strings, numbers, arrays, objects)
+        4. NO trailing commas
+        5. Validate complete JSON before returning
+        6. NO extra text before or after JSON
+        
+        REQUIRED STRUCTURE:
+{
+  "summary": "string",
+  "programme_recommendations": {
+    "options": [
+      {
+        "name": "string",
+        "description": "string",
+        "capacity": "string",
+        "cost": "string",
+        "amenities": ["string"],
+        "dependencies": ["string"]
+      }
+    ],
+    "timeline_and_logistics": ["string"],
+    "session_and_flow": {
+      "morning_session": "string",
+      "afternoon_session": "string"
+    },
+    "breaks_networking": ["string"],
+    "technical_and_materials_requirements": ["string"],
+    "contingency_plans": ["string"],
+    "top_recommendation": {
+      "option": "string",
+      "rationale": "string",
+      "dependencies": ["string"]
+    },
+    "backup_option": {
+      "option": "string",
+      "rationale": "string"
+    }
+  },
+  "next_steps": ["string"]
+}
         """,
         tools=[create_event_schedule, plan_session_flow, create_break_schedule]
     )

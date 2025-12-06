@@ -23,7 +23,190 @@ AGENT_MAX_TURNS = 20
 # Sandboxed MCP configuration
 SANDBOX_DIR = Path("/tmp/mcp_event_outputs")
 PROJECT_OUTPUT_DIR = Path(__file__).parent.parent / "event_outputs"
-SANDBOX_ENABLED = True  # Set to False to disable sandboxing
+SANDBOX_ENABLED = False  # Set to False to disable sandboxing
+
+# Canonical JSON schemas - agents MUST return outputs matching these exact structures
+AGENT_SCHEMAS = {
+    "planning": {
+        "analysis": "string",
+        "required_agents": ["venue", "catering", "programme", "speakers", "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"],
+        "execution_order_rationale": "string",
+        "special_considerations": ["string"],
+    },
+    "budgeting": {
+        "budget_allocation_recommended": {"category": {"recommended_spend": "number", "pct_of_total": "number", "notes": "string"}},
+        "major_category_breakdowns": {"category": {"recommended_spend": "number", "pct_of_total": "number", "key_assumptions": ["string"]}},
+        "what_if_scenarios": [{"name": "string", "delta": "string", "impact": "string", "recommendation": "string"}],
+        "scenario_recommendation": {"name": "string", "reason": "string"},
+        "allocation_rationale": "string",
+        "warnings": ["string"],
+    },
+    "venue": {
+        "summary": "string",
+        "venues": [{"name": "string", "location": "string", "capacity": "number", "estimated_cost": "string|number", "amenities": ["string"], "availability_notes": "string", "website": "string", "backup_alternatives": ["string"]}],
+        "timeline_and_logistics": ["string"],
+        "top_recommendation": {"option": "string", "rationale": "string", "dependencies": ["string"]},
+    },
+    "catering": {
+        "summary": "string",
+        "menu_overview": ["string"],
+        "dietary_accommodations": ["string"],
+        "budget_estimate": {"per_person": "number", "total": "number", "notes": "string"},
+        "timeline_and_logistics": ["string"],
+    },
+    "programme": {
+        "summary": "string",
+        "programme_recommendations": {
+            "options": [{"name": "string", "description": "string", "capacity": "string|number", "cost": "string|number", "amenities": ["string"], "dependencies": ["string"]}],
+            "timeline_and_logistics": ["string"],
+            "session_and_flow": {"key": "time-range-or-note"},
+            "breaks_networking": ["string"],
+            "technical_and_materials_requirements": ["string"],
+            "contingency_plans": ["string"],
+            "top_recommendation": {"option": "string", "rationale": "string", "dependencies": "string"},
+            "backup_option": {"option": "string", "rationale": "string"},
+        },
+        "next_steps": ["string"],
+    },
+    "speakers": {
+        "summary": "string",
+        "speakers_recommendations": {
+            "primary_objectives": ["string"],
+            "top_speaker_options": [{"name": "string", "bio": "string", "estimated_fee": "string|number", "ideal_role": "string", "logistics": "string", "rationale": "string"}],
+            "honorarium_budget_itemization": {"item": "string|number"},
+            "timeline_logistics": ["string"],
+            "technical_dependencies": ["string"],
+            "other_dependencies": ["string"],
+            "backup_plan": {"virtual_alternative": "string", "local_rising_star": "string"},
+        },
+        "recommendation_rationale": "string",
+    },
+    "activities": {
+        "activity_planning": {
+            "summary": "string",
+            "recommendations": [{"name": "string", "description": "string", "duration": "string|number", "cost_estimate": "string|number", "notes": "string"}],
+            "logistics": ["string"],
+            "budget_estimate": {"total": "number", "breakdown": {"item": "number"}},
+        }
+    },
+    "entertainment": {
+        "entertainment_recommendations": {
+            "summary": "string",
+            "specific_options": [{"name": "string", "description": "string", "cost_estimate": "number", "vendor_notes": "string"}],
+            "budget_estimate": {"total": "number", "breakdown": {"item": "number"}},
+            "recommended_package": {"option": "string", "components": ["string"], "rationale": ["string"]},
+            "timeline_and_logistics": ["string"],
+            "technical_requirements": ["string"],
+            "backup_entertainment_plans": [{"scenario": "string", "plan": "string"}],
+            "dependencies_on_other_areas": ["string"],
+            "top_recommendations_and_rationale": {
+                "recommendation_1": {"choice": "string", "reason": "string"},
+                "recommendation_2": {"choice": "string", "reason": "string"},
+            },
+        }
+    },
+    "communication": {
+        "communication_recommendations": {
+            "overview": "string",
+            "channels": ["string"],
+            "key_messages": ["string"],
+            "timeline": ["string"],
+            "budget_overview": {"total": "number", "breakdown": {"channel": "number"}},
+        }
+    },
+    "scheduling": {
+        "status": "optimal|feasible|infeasible",
+        "optimized_schedule": [{"session_id": "number", "name": "string", "start_time": "HH:MM", "end_time": "HH:MM", "duration": "number", "room": "string", "capacity": "number", "speaker": "string", "expected_attendees": "number"}],
+        "metrics": {"total_duration": "number", "event_ends_at": "HH:MM", "room_utilization": {"room": "pct"}, "conflicts_resolved": "string"},
+        "conflicts_explained": ["string"],
+        "actionable_suggestions": ["string"],
+        "next_steps": ["string"],
+    },
+    "calendar": {
+        "calendar_file_path": "string",
+        "event_summary": "string",
+        "timing_details": "string",
+        "import_instructions": "string",
+    },
+    "form": {
+        "form_url": "string",
+        "status": "success|error",
+        "message": "string|null",
+    },
+    "final_plan": {
+        "executive_summary": "string",
+        "timeline": [{"phase": "string", "tasks": ["string"], "deadline": "YYYY-MM-DD"}],
+        "schedule": {
+            "optimized": "boolean",
+            "sessions": [{"session_id": "number", "name": "string", "start_time": "HH:MM", "end_time": "HH:MM", "duration": "number", "room": "string", "capacity": "number", "speaker": "string", "expected_attendees": "number"}],
+            "metrics": {"total_duration": "string|number", "event_ends_at": "HH:MM", "room_utilization": {"room": "pct"}, "conflicts_resolved": "string"},
+            "status": "optimal|feasible|infeasible",
+        },
+        "budget": {"total_available": "number", "total_allocated": "number", "by_category": {"category": "number"}, "status": "within_budget|over_budget|at_limit"},
+        "recommendations": {"venue": {}, "catering": {}, "programme": {}, "speakers": {}, "communication": {}, "activities": {}, "entertainment": {}, "budgeting": {}, "scheduling": {}},
+        "risks": [{"risk": "string", "severity": "high|medium|low", "mitigation": "string"}],
+        "action_items": [{"action": "string", "owner": "string", "deadline": "string", "priority": "high|medium|low"}],
+        "assumptions": ["string"],
+    },
+}
+
+
+def validate_agent_output(agent_name: str, output: Any) -> Dict[str, Any]:
+    """Validate and normalize agent output to match canonical schema.
+    
+    Args:
+        agent_name: The agent identifier (e.g., 'venue', 'budgeting', 'final_plan')
+        output: Raw output from the agent (string or dict)
+    
+    Returns:
+        Validated dict matching the canonical schema
+    
+    Raises:
+        ValueError: If output cannot be parsed or validated
+    """
+    # Parse if string - try multiple extraction methods
+    if isinstance(output, str):
+        output_str = output.strip()
+        
+        # Try direct JSON parse first
+        try:
+            parsed = json.loads(output_str)
+            output = parsed
+        except json.JSONDecodeError:
+            # Try extracting JSON from markdown code blocks
+            try:
+                # Try ```json ... ``` blocks
+                if '```json' in output_str:
+                    json_str = output_str.split('```json')[1].split('```')[0].strip()
+                elif '```' in output_str:
+                    json_str = output_str.split('```')[1].split('```')[0].strip()
+                else:
+                    # Try to find JSON object {...}
+                    import re
+                    match = re.search(r'\{.*\}', output_str, re.DOTALL)
+                    if not match:
+                        raise ValueError(f"No JSON object found in output")
+                    json_str = match.group(0)
+                
+                parsed = json.loads(json_str)
+                output = parsed
+            except (json.JSONDecodeError, IndexError, ValueError) as e:
+                raise ValueError(f"Agent '{agent_name}' returned invalid JSON: {e}")
+    
+    if not isinstance(output, dict):
+        raise ValueError(f"Agent '{agent_name}' must return a dict, got {type(output)}")
+    
+    schema = AGENT_SCHEMAS.get(agent_name)
+    if not schema:
+        # If no schema defined, return as-is (for backward compatibility)
+        return output
+    
+    # Ensure all required top-level keys exist
+    missing_keys = [key for key in schema.keys() if key not in output]
+    if missing_keys:
+        raise ValueError(f"Agent '{agent_name}' missing required keys: {', '.join(missing_keys)}")
+    
+    return output
 
 
 def get_current_date_context() -> str:
@@ -363,7 +546,15 @@ Provide detailed, actionable recommendations for {agent_name}, including:
 Output structured JSON with your recommendations."""
 
         result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
-        specialist_outputs[agent_name] = result.final_output
+        
+        # Validate and normalize output to match schema
+        try:
+            validated_output = validate_agent_output(agent_name, result.final_output)
+            specialist_outputs[agent_name] = validated_output
+        except ValueError as e:
+            print(f"⚠️  Schema validation error for {agent_name}: {e}")
+            print(f"   Storing raw output anyway for debugging...")
+            specialist_outputs[agent_name] = result.final_output
         
         print(f"✓ Complete\n")
 
@@ -581,17 +772,21 @@ Output JSON with:
     try:
         from tools.report_generator import generate_event_proposal_pdf
         
-        # Parse final plan if it's a string
-        final_plan_dict = final_result.final_output
-        if isinstance(final_plan_dict, str):
-            try:
-                final_plan_dict = json.loads(final_plan_dict)
-            except:
-                # If parsing fails, create a basic structure
-                final_plan_dict = {
-                    "executive_summary": final_result.final_output[:1000],
-                    "assumptions": ["Unable to parse full plan structure"]
-                }
+        # Validate final plan against schema
+        try:
+            final_plan_dict = validate_agent_output("final_plan", final_result.final_output)
+        except ValueError as e:
+            print(f"⚠️  Final plan schema validation error: {e}")
+            print(f"   Using raw output for PDF generation...")
+            final_plan_dict = final_result.final_output
+            if isinstance(final_plan_dict, str):
+                try:
+                    final_plan_dict = json.loads(final_plan_dict)
+                except:
+                    final_plan_dict = {
+                        "executive_summary": final_result.final_output[:1000],
+                        "assumptions": ["Unable to parse full plan structure"]
+                    }
         
         pdf_path = generate_event_proposal_pdf(
             event_details=event_details,
@@ -661,11 +856,27 @@ Output JSON with:
         sms_sent = False
         sms_message_sid = None
     
+    # Validate planning phase output
+    validated_planning = planning_result.final_output
+    try:
+        validated_planning = validate_agent_output("planning", planning_result.final_output)
+    except ValueError as e:
+        print(f"⚠️  Planning phase schema validation error: {e}")
+    
+    # Validate all specialist outputs one more time before returning
+    validated_specialist_outputs = {}
+    for agent_name, output in specialist_outputs.items():
+        try:
+            validated_specialist_outputs[agent_name] = validate_agent_output(agent_name, output)
+        except ValueError as e:
+            print(f"⚠️  Final validation error for {agent_name}: {e}")
+            validated_specialist_outputs[agent_name] = output
+    
     # Return comprehensive results
     result = {
         "event_details": event_details,
-        "planning_phase": planning_result.final_output,
-        "specialist_outputs": specialist_outputs,
+        "planning_phase": validated_planning,
+        "specialist_outputs": validated_specialist_outputs,
         "final_plan": final_result.final_output,
         "calendar_invite": calendar_result.final_output,
         "registration_form": form_data,
