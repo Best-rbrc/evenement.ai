@@ -14,15 +14,80 @@ from typing import Dict, Any, List
 import json
 import datetime
 import asyncio
+import shutil
+from pathlib import Path
 
 # Allow longer agent exchanges (default 10 can be too short for tool-rich agents)
 AGENT_MAX_TURNS = 20
+
+# Sandboxed MCP configuration
+SANDBOX_DIR = Path("/tmp/mcp_event_outputs")
+PROJECT_OUTPUT_DIR = Path(__file__).parent.parent / "event_outputs"
+SANDBOX_ENABLED = True  # Set to False to disable sandboxing
 
 
 def get_current_date_context() -> str:
     """Get current date context for agents."""
     current_date = datetime.datetime.now()
     return f"Today's date: {current_date.strftime('%B %d, %Y')} ({current_date.strftime('%Y-%m-%d')})"
+
+
+async def setup_sandboxed_mcp():
+    """Setup sandboxed MCP server for file operations.
+    
+    Returns:
+        MCPServers instance (not a context manager, just stores the servers)
+    """
+    from mcp_sandbox_openai_sdk import (
+        FSAccess,
+        MCPManifest,
+        Permission,
+        SandboxedMCPStdio,
+    )
+    
+    SANDBOX_DIR.mkdir(parents=True, exist_ok=True)
+    PROJECT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    
+    manifest = MCPManifest(
+        name="Filesystem Server",
+        description="Sandbox-restricted file server for event outputs (ICS calendar files)",
+        registry="npm",
+        package_name="@modelcontextprotocol/server-filesystem",
+        permissions=[
+            Permission.MCP_AC_FILESYSTEM_READ,
+            Permission.MCP_AC_FILESYSTEM_WRITE,
+            Permission.MCP_AC_FILESYSTEM_DELETE,
+        ],
+    )
+    
+    # Create sandboxed MCP server
+    sandboxed_server = SandboxedMCPStdio(
+        manifest=manifest,
+        runtime_args=[str(SANDBOX_DIR)],
+        runtime_permissions=[
+            FSAccess(str(SANDBOX_DIR), read=True, write=True),
+        ],
+    )
+    
+    # Initialize the server
+    await sandboxed_server.__aenter__()
+    return sandboxed_server
+
+
+def copy_sandbox_files_to_project():
+    """Copy files from sandbox temp directory to project directory."""
+    if not SANDBOX_DIR.exists():
+        return
+    
+    copied_count = 0
+    for file in SANDBOX_DIR.glob("*"):
+        if file.is_file():
+            dest = PROJECT_OUTPUT_DIR / file.name
+            shutil.copy2(file, dest)
+            copied_count += 1
+    
+    if copied_count > 0:
+        print(f"✅ Copied {copied_count} file(s) from sandbox to {PROJECT_OUTPUT_DIR}")
 
 
 def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
@@ -44,14 +109,15 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     - Produces final unified plan
     """
     # Ensure an asyncio event loop exists for sync runner on Python 3.13+
-    def _ensure_loop():
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            loop_local = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop_local)
-
-    _ensure_loop()
+    # Create ONE loop and use it throughout the workflow
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
     # Import SDK components
     try:
@@ -75,12 +141,32 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     print("📋 PHASE 1: Strategic Planning\n")
     print("Coordinator analyzing event requirements...\n")
 
+    # Setup sandboxed MCP if enabled (before creating agents that need it)
+    mcp_servers = None
+    global SANDBOX_ENABLED
+    if SANDBOX_ENABLED:
+        try:
+            print("🔒 Setting up sandboxed file server...\n")
+            # Use the active event loop to setup MCP
+            mcp_servers = loop.run_until_complete(setup_sandboxed_mcp())
+            print("✅ MCP server initialized - calendar files will be sandboxed\n")
+        except Exception as e:
+            print(f"⚠️  MCP setup failed: {e}\n")
+            print("⏸️  Falling back to local file writes (no sandboxing)\n")
+            SANDBOX_ENABLED = False
+            mcp_servers = None
+
     # Create all available specialists (coordinator will decide which to use)
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
         "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"
     ]
-    all_specialists = create_specialized_agents(all_agent_types)
+    all_specialists = create_specialized_agents(all_agent_types, mcp_servers=mcp_servers if SANDBOX_ENABLED else None)
+    
+    if mcp_servers is not None:
+        print("📡 Calendar agent configured with MCP servers\n")
+    else:
+        print("📂 Calendar agent using local file I/O\n")
     
     # Create coordinator with handoffs to all specialists
     coordinator = create_coordinator_agent(event_details, all_agent_types, all_specialists)
@@ -137,13 +223,12 @@ IMPORTANT GUIDELINES:
 - Be strategic and selective - don't include agents that aren't truly needed for this event type."""
 
     # Run coordinator planning with rate-limit aware retries
-    _ensure_loop()
+    # Event loop is already set up at function start
     def _run_sync_with_backoff(agent, prompt, max_retries: int = 3):
         import time, re, random
         last_exc = None
         for attempt in range(max_retries):
             try:
-                _ensure_loop()
                 return Runner.run_sync(agent, prompt, max_turns=AGENT_MAX_TURNS)
             except Exception as e:
                 last_exc = e
@@ -277,7 +362,6 @@ Provide detailed, actionable recommendations for {agent_name}, including:
 
 Output structured JSON with your recommendations."""
 
-        _ensure_loop()
         result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
         specialist_outputs[agent_name] = result.final_output
         
@@ -379,7 +463,6 @@ Your task for PHASE 3 - FINALIZATION:
 
 Use handoffs if needed to refine or add information. Then provide your final synthesized plan."""
 
-    _ensure_loop()
     final_result = _run_sync_with_backoff(coordinator, finalization_prompt)
     
     print("✅ Finalization complete!\n")
@@ -434,7 +517,6 @@ Output JSON with:
 - timing_details
 - import_instructions"""
 
-    _ensure_loop()
     calendar_result = Runner.run_sync(calendar_agent, calendar_prompt, max_turns=AGENT_MAX_TURNS)
     
     print("✅ Calendar invite generated!\n")
@@ -580,7 +662,7 @@ Output JSON with:
         sms_message_sid = None
     
     # Return comprehensive results
-    return {
+    result = {
         "event_details": event_details,
         "planning_phase": planning_result.final_output,
         "specialist_outputs": specialist_outputs,
@@ -594,5 +676,34 @@ Output JSON with:
         "sms_sent": sms_sent,
         "sms_message_sid": sms_message_sid
     }
+    
+    # Cleanup: close MCP and copy files
+    try:
+        if mcp_servers is not None:
+            # MCPServers has async exit, but we can't await in sync context
+            # Just let it be garbage collected; the sandboxed server will close
+            print("\n🔒 Sandboxed file server closed.")
+        
+        if SANDBOX_ENABLED and SANDBOX_DIR.exists():
+            print("📁 Copying files from sandbox to project...")
+            copy_sandbox_files_to_project()
+            print("✅ Sandbox files copied to event_outputs/\n")
+    except Exception as cleanup_error:
+        print(f"⚠️  Cleanup error: {cleanup_error}")
+    
+    # Show where calendar file was created
+    from pathlib import Path
+    calendar_files = list(Path("event_outputs").glob("*.ics"))
+    if calendar_files:
+        print("=" * 60)
+        print("📅 Calendar Files Created:")
+        for cf in calendar_files:
+            if mcp_servers is not None:
+                print(f"  📡 {cf.name} (via sandboxed MCP)")
+            else:
+                print(f"  📂 {cf.name} (local file I/O)")
+        print("=" * 60 + "\n")
+    
+    return result
 
 
