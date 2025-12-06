@@ -104,13 +104,23 @@ if create_accommodation_agent:
     AGENT_CREATORS["accommodation"] = create_accommodation_agent
 
 
-def create_specialized_agents(required_agents: List[str]) -> Dict[str, Agent]:
-    """Create specialized agents based on the required agent types."""
+def create_specialized_agents(required_agents: List[str], mcp_servers=None) -> Dict[str, Agent]:
+    """Create specialized agents based on the required agent types.
+    
+    Args:
+        required_agents: List of agent type names to create
+        mcp_servers: Optional MCPServers instance to pass to agents that support it (e.g., calendar)
+    """
     agents = {}
     
     for agent_type in required_agents:
         if agent_type in AGENT_CREATORS:
-            agents[agent_type] = AGENT_CREATORS[agent_type]()
+            creator = AGENT_CREATORS[agent_type]
+            # Pass mcp_servers to calendar agent if available
+            if agent_type == "calendar" and mcp_servers is not None:
+                agents[agent_type] = creator(mcp_servers=mcp_servers)
+            else:
+                agents[agent_type] = creator()
         else:
             # Create a generic agent for unknown types
             agents[agent_type] = Agent(

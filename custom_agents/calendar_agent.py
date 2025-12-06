@@ -19,6 +19,7 @@ def generate_ics_file(event_name: str, event_date: str, start_time: str, end_tim
                      location: str, description: str, organizer_email: str = "") -> str:
     """
     Generate an ICS calendar file for the event.
+    If MCP servers are available to the agent, use them. Otherwise save locally.
     Returns the file path where the calendar invite was saved.
     """
     try:
@@ -85,17 +86,17 @@ END:VALARM
 END:VEVENT
 END:VCALENDAR"""
         
-        # Create output directory if it doesn't exist
-        output_dir = "event_outputs"
-        os.makedirs(output_dir, exist_ok=True)
-        
         # Generate filename
         safe_event_name = "".join(c for c in event_name if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_event_name = safe_event_name.replace(' ', '_')
         filename = f"{safe_event_name}_{event_date_only}.ics"
+        
+        # Create output directory
+        output_dir = "event_outputs"
+        os.makedirs(output_dir, exist_ok=True)
         filepath = os.path.join(output_dir, filename)
         
-        # Write ICS file
+        # Write ICS file locally (agents should use MCP tools if they want sandboxed writes)
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(ics_content)
         
@@ -208,12 +209,20 @@ def format_calendar_description(event_details: str, specialist_outputs: str) -> 
         return f"Event planned with AI Event Planner. Contact organizer for details. Error: {str(e)}"
 
 
-def create_calendar_agent() -> Agent:
-    """Create a calendar specialist agent that generates calendar invites."""
-    return Agent(
-        name="Calendar Specialist", 
-        handoff_description="Creates calendar invites and ICS files for the planned event.",
-        instructions="""
+def create_calendar_agent(mcp_servers=None) -> Agent:
+    """Create a calendar specialist agent that generates calendar invites.
+    
+    Args:
+        mcp_servers: Optional MCPServers instance for sandboxed file operations
+    """
+    # Build tools list
+    tools = [generate_ics_file, parse_event_timing, format_calendar_description, get_current_date]
+    
+    # Build agent with optional MCP servers
+    agent_kwargs = {
+        "name": "Calendar Specialist", 
+        "handoff_description": "Creates calendar invites and ICS files for the planned event.",
+        "instructions": """
         You are a professional calendar and scheduling specialist. Your role is to create calendar invites 
         and ICS files based on event planning details and outputs from other specialists.
 
@@ -267,5 +276,11 @@ def create_calendar_agent() -> Agent:
 
         Output your recommendations in JSON format with calendar file details and timing information.
         """,
-        tools=[generate_ics_file, parse_event_timing, format_calendar_description, get_current_date]
-    )
+        "tools": tools,
+    }
+    
+    # Only add mcp_servers if provided (and it's not None)
+    if mcp_servers is not None:
+        agent_kwargs["mcp_servers"] = [mcp_servers]
+    
+    return Agent(**agent_kwargs)
