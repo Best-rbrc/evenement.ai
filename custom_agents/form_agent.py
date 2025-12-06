@@ -26,7 +26,7 @@ def create_form_agent() -> Agent:
 
     # Configure model with rate limit friendly settings
     model_settings = ModelSettings(
-        max_tokens=4000,  # Reduced from 8000 to save tokens
+        max_tokens=8000,  # Limit response tokens to stay under rate limits
         temperature=0.7
     )
 

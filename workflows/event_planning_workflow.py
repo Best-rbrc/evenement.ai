@@ -82,13 +82,56 @@ def run_event_planning(event_details: Dict[str, Any]) -> Dict[str, Any]:
     # Create coordinator with handoffs to all specialists
     coordinator = create_coordinator_agent(event_details, all_agent_types, all_specialists)
 
-    planning_prompt = f"""Plan "{event_details['event_name']}". Select needed agents and execution order.
+    planning_prompt = f"""You are the Event Planning Coordinator analyzing requirements for "{event_details['event_name']}".
 
-Event: {json.dumps(event_details, indent=2)}
+{get_current_date_context()}
 
-Agents: venue, catering, programme, speakers, communication, activities, entertainment, budgeting, scheduling, calendar, form
+Event Details:
+{json.dumps(event_details, indent=2)}
 
-Return JSON: {{"required_agents": [...], "execution_order_rationale": "..."}}"""
+Your task for PHASE 1 - STRATEGIC PLANNING:
+
+1. Analyze the event type, budget, guest count, and special requirements
+2. Decide which specialist agents are needed for this event
+3. Determine the optimal ORDER to call them (e.g., venue first, then catering based on venue kitchen)
+4. Identify any special considerations or constraints
+
+Available specialists:
+- venue: Physical location selection and logistics
+- catering: Food, beverages, and dining service
+- programme: Event schedule and session planning
+- speakers: Speaker/presenter coordination
+- communication: Marketing, invitations, attendee communications
+- activities: Team-building and recreational activities
+- entertainment: Entertainment and performance coordination
+- budgeting: Budget allocation, what-if scenarios, cost validation
+- scheduling: Advanced constraint-based schedule optimization (resolves conflicts, optimizes room/speaker assignments)
+- calendar: Calendar invites and ICS file generation
+- form: Online registration/RSVP form creation (auto-generated in Phase 4)
+
+Output your plan as JSON:
+{{
+  "analysis": "Brief analysis of event needs",
+  "required_agents": ["agent1", "agent2", ...],  // In optimal execution order
+  "execution_order_rationale": "Why this order makes sense",
+  "special_considerations": ["consideration1", "consideration2", ...]
+}}
+
+IMPORTANT GUIDELINES:
+- ALWAYS include "budgeting" agent early in the sequence (typically after venue/catering needs are identified)
+- Budgeting should run BEFORE cost-heavy agents provide estimates (so they have allocation targets)
+- OR budgeting can run AFTER specialists to validate and create what-if scenarios
+
+- WHEN TO USE "scheduling" agent (CRITICAL):
+  * USE for: conferences, workshops, summits, multi-day events, academic events
+  * USE when: Multiple sessions, speakers, or parallel tracks need coordination
+  * USE when: Multiple rooms/venues need to be scheduled without conflicts
+  * SKIP for: Simple single-session events (weddings, birthday parties, single galas)
+  * SKIP for: Events with one linear timeline (no room/speaker conflicts possible)
+  * PLACEMENT: AFTER programme, speakers, and venue agents (needs their output as input)
+  * BEFORE calendar agent (provides optimized times for calendar generation)
+
+- Be strategic and selective - don't include agents that aren't truly needed for this event type."""
 
     # Run coordinator planning with rate-limit aware retries
     _ensure_loop()
@@ -152,18 +195,10 @@ Return JSON: {{"required_agents": [...], "execution_order_rationale": "..."}}"""
         print(f"[{idx}/{len(required_agents)}] 🎯 {agent_name.title()} Specialist")
         print(f"{'─'*40}")
         
-        # Build minimal context - only essential info
+        # Build context-aware prompt with prior outputs
         context = ""
-        if len(specialist_outputs) > 0:
-            # Only include key findings, not full outputs
-            context_summary = {}
-            for k, v in specialist_outputs.items():
-                # Truncate output to key info only
-                if isinstance(v, str) and len(v) > 200:
-                    context_summary[k] = v[:200] + "..."
-                else:
-                    context_summary[k] = v
-            context = f"\n\nPrevious outputs: {json.dumps(context_summary, indent=1)}"
+        if specialist_outputs:
+            context = f"\n\nPrevious specialist outputs for context:\n{json.dumps(specialist_outputs, indent=2)}"
         
         # Special handling for budgeting agent
         if agent_name == "budgeting":
@@ -222,11 +257,22 @@ Output comprehensive JSON with optimized schedule, metrics, and any conflict res
             if "budgeting" in specialist_outputs:
                 budget_context = f"\n\nBUDGET CONSTRAINTS from Budgeting Specialist:\n{specialist_outputs['budgeting']}\n\nPlease ensure your recommendations fit within your allocated budget."
             
-            specialist_prompt = f"""{agent_name} specialist for "{event_details['event_name']}". 
+            specialist_prompt = f"""You are the {agent_name} specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
 
-Event: {event_details.get('event_type', '')}, {event_details.get('guest_count', 'N/A')} guests, ${event_details.get('budget', 'N/A')} budget{budget_context}
+{get_current_date_context()}
 
-Provide JSON recommendations with costs, timeline, top options."""
+Event Details:
+{json.dumps(event_details, indent=2)}{context}{budget_context}
+
+Your task:
+Provide detailed, actionable recommendations for {agent_name}, including:
+- Specific options with names and costs where applicable
+- Timeline and logistics considerations
+- Budget estimates (itemized)
+- Top recommendations with rationale
+- Any dependencies on other areas
+
+Output structured JSON with your recommendations."""
 
         _ensure_loop()
         result = Runner.run_sync(agent, specialist_prompt)
@@ -243,14 +289,92 @@ Provide JSON recommendations with costs, timeline, top options."""
     
     print("Coordinator reviewing all outputs...\n")
 
-    finalization_prompt = f"""Finalize plan for "{event_details['event_name']}".
+    finalization_prompt = f"""You are the Event Planning Coordinator finalizing the plan for "{event_details['event_name']}".
 
-Specialists: {', '.join(required_agents)}
+{get_current_date_context()}
 
-Outputs:
+You have received outputs from these specialists: {', '.join(required_agents)}
+
+Event Details:
+{json.dumps(event_details, indent=2)}
+
+All Specialist Outputs:
 {json.dumps(specialist_outputs, indent=2)}
 
-Review for conflicts, synthesize final JSON: {{"executive_summary": "", "timeline": [], "budget": {{}}, "recommendations": {{}}, "action_items": [], "assumptions": []}}"""
+Your task for PHASE 3 - FINALIZATION:
+
+1. REVIEW all specialist outputs for:
+   - Budget conflicts (total cost vs available budget) - IF BUDGETING AGENT RAN: Check their scenario analysis
+   - Logical inconsistencies (e.g., venue capacity vs guest count)
+   - Missing critical information
+   - Interdependencies and conflicts
+
+2. BUDGET VALIDATION (CRITICAL):
+   - IF budgeting agent was NOT used yet: Handoff to budgeting agent NOW to validate all costs
+   - IF budgeting agent shows over_budget scenarios: Consider their recommended scenario
+   - Ensure final plan reflects budgeting agent's approved allocation
+
+2.5. SCHEDULING OPTIMIZATION REVIEW (IF SCHEDULING AGENT WAS USED):
+   - Extract and preserve scheduling metrics (total_duration, room_utilization, conflicts_resolved)
+   - Include optimized schedule in final plan under "schedule" section
+   - Highlight any scheduling conflicts that were resolved
+   - If scheduling was infeasible, document the conflicts and suggestions
+
+3. IF YOU IDENTIFY OTHER ISSUES OR GAPS:
+   - You can handoff to ANY specialist agent (even ones not called yet) to:
+     * Refine their recommendations with adjusted constraints
+     * Fill in missing information
+     * Resolve conflicts with other areas
+   - Example: "Venue costs exceed budget - handoff to venue agent with reduced budget"
+   - Example: "We need decoration planning - handoff to decoration agent"
+
+3. SYNTHESIZE the final comprehensive event plan including:
+   - Executive summary (2-3 paragraphs)
+   - Complete event timeline (with all areas integrated)
+   - Detailed budget breakdown by category with totals
+   - All specialist recommendations (organized and refined)
+   - Risk assessment with mitigation strategies
+   - Prioritized action items with deadlines
+   - Assumptions made
+
+4. OUTPUT as valid JSON:
+{{
+  "executive_summary": "...",
+  "timeline": [
+    {{"phase": "...", "tasks": [...], "deadline": "..."}}
+  ],
+  "schedule": {{
+    "optimized": true/false,
+    "sessions": [...],  // REQUIRED if scheduling agent was used
+    "metrics": {{
+      "total_duration": "...",
+      "event_ends_at": "...",
+      "room_utilization": {{}},
+      "conflicts_resolved": "..."
+    }},
+    "status": "optimal | feasible | infeasible"  // from scheduling agent output
+  }},
+  "budget": {{
+    "total_available": "...",
+    "total_allocated": "...",
+    "by_category": {{}},
+    "status": "within_budget | over_budget | at_limit"
+  }},
+  "recommendations": {{
+    "venue": {{}},
+    "catering": {{}},
+    ...
+  }},
+  "risks": [
+    {{"risk": "...", "severity": "high|medium|low", "mitigation": "..."}}
+  ],
+  "action_items": [
+    {{"action": "...", "owner": "...", "deadline": "...", "priority": "high|medium|low"}}
+  ],
+  "assumptions": [...]
+}}
+
+Use handoffs if needed to refine or add information. Then provide your final synthesized plan."""
 
     _ensure_loop()
     final_result = _run_sync_with_backoff(coordinator, finalization_prompt)
@@ -479,64 +603,10 @@ Output JSON with:
             print(f"⚠️  Failed to write local form schema: {_e}\n")
     
     # ============================================================
-    # PHASE 5: SMS NOTIFICATION (OPTIONAL)
+    # PHASE 5: PDF REPORT GENERATION
     # ============================================================
     print(f"\n{'='*60}")
-    print("📱 PHASE 5: SMS Notification")
-    print(f"{'='*60}\n")
-    
-    # Ask user if they want to send SMS
-    try:
-        send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
-        
-        if send_sms in ['yes', 'y', 'true', '1']:
-            print("Sending SMS notification...\n")
-            
-            try:
-                from twilio.rest import Client
-                
-                # Twilio credentials
-                account_sid = 'ACad1d89daf3c3b29db84f0714eeadb6cb'
-                auth_token = '2a20c86b0ed50623d61b9404f85a6281'
-                client = Client(account_sid, auth_token)
-                
-                # Create SMS body with Tally form
-                event_name = event_details.get('event_name', 'Event')
-                event_date = event_details.get('event_date', 'TBD')
-                form_url = form_data.get('form_url', 'Form link available soon')
-                
-                sms_body = f"Hey! You're invited to {event_name} on {event_date}. RSVP: {form_url}"
-                
-                # Send SMS
-                message = client.messages.create(
-                    from_='+15075955374',
-                    body=sms_body,
-                    to='+4178018164'
-                )
-                
-                print(f"✅ SMS sent successfully! Message SID: {message.sid}\n")
-                sms_sent = True
-                sms_message_sid = message.sid
-                
-            except Exception as sms_error:
-                print(f"⚠️  Failed to send SMS: {sms_error}\n")
-                sms_sent = False
-                sms_message_sid = None
-        else:
-            print("SMS notification skipped.\n")
-            sms_sent = False
-            sms_message_sid = None
-            
-    except Exception as e:
-        print(f"⚠️  SMS input error: {e}\n")
-        sms_sent = False
-        sms_message_sid = None
-
-    # ============================================================
-    # PHASE 6: PDF REPORT GENERATION
-    # ============================================================
-    print(f"\n{'='*60}")
-    print("📄 PHASE 6: Generating Professional PDF Report")
+    print("📄 PHASE 5: Generating Professional PDF Report")
     print(f"{'='*60}\n")
     
     print("Creating comprehensive PDF proposal...\n")
@@ -579,8 +649,6 @@ Output JSON with:
         "calendar_invite": calendar_result.final_output,
         "registration_form": form_data,
         "pdf_report": pdf_path,
-        "sms_sent": sms_sent,
-        "sms_message_sid": sms_message_sid,
         "agents_used": required_agents + ["calendar", "form"],
         "success": True,
         "pdf_generated": pdf_generated
