@@ -28,6 +28,7 @@ const agentDefinitions: Record<string, { name: string; icon: string }> = {
   communication: { name: 'Communication Agent', icon: 'MessageSquare' },
   calendar: { name: 'Calendar Agent', icon: 'CalendarCheck' },
   form: { name: 'Registration Form Agent', icon: 'FileText' },
+  logo: { name: 'Logo Agent', icon: 'Image' },
 };
 
 type JsonRecord = Record<string, any>;
@@ -472,9 +473,11 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
   // Extract export data
   const calendarInvite = parseJson<JsonRecord>(workflow.calendar_invite) || {};
   const registrationForm = workflow.registration_form as JsonRecord | undefined;
+  const logoData = workflow.logo as JsonRecord | undefined;
   const calendarFile = calendarInvite?.calendar_file_path as string | undefined;
   const pdfFile = workflow.pdf_report as string | undefined;
   const formUrl = registrationForm?.form_url as string | undefined;
+  const logoFile = logoData?.logo_file_path as string | undefined;
 
   return {
     eventDetails,
@@ -511,6 +514,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
       calendarFile,
       pdfFile,
       formUrl,
+      logoFile,
     },
     success: Boolean(workflow.success ?? true),
   };

@@ -90,6 +90,7 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
             calendarFile={result.exports?.calendarFile}
             pdfFile={result.exports?.pdfFile}
             formUrl={result.exports?.formUrl}
+            logoFile={result.exports?.logoFile}
           />
         </div>
       </motion.div>
