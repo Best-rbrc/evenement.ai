@@ -128,8 +128,16 @@ class EventProposalReport:
         story.append(PageBreak())
         
         # Schedule (if scheduling agent was used)
-        story.extend(self._create_schedule_section(final_plan, styles))
-        story.append(PageBreak())
+        schedule_story = self._create_schedule_section(final_plan, styles)
+        if schedule_story:  # Only add page break if schedule section has content
+            story.extend(schedule_story)
+            story.append(PageBreak())
+        
+        # Logo section (if logo was generated)
+        logo_story = self._create_logo_section(final_plan, specialist_outputs, styles)
+        if logo_story:
+            story.extend(logo_story)
+            story.append(PageBreak())
         
         # Risk assessment
         story.extend(self._create_risk_section(final_plan, styles))
@@ -276,7 +284,7 @@ class EventProposalReport:
         # Footer with accent color
         story.append(Spacer(1, 1.5*inch))
         footer = Paragraph(
-            f"<font color='{self.accent_color.hexval()}'><b>AI Event Planner</b></font><br/>"
+            f"<font color='{self.accent_color.hexval()}'><b>Évènement.ai</b></font><br/>"
             f"<font color='{self.muted_text.hexval()}'>Comprehensive Event Planning Solutions</font>",
             styles['Subtitle']
         )
@@ -384,9 +392,9 @@ class EventProposalReport:
                 tasks_text = str(tasks) if tasks else 'No tasks specified'
             
             timeline_data.append([
-                phase_name,
+                Paragraph(phase_name.replace('\n', '<br/>'), styles['Normal']),
                 Paragraph(tasks_text, styles['Normal']),
-                deadline
+                Paragraph(str(deadline).replace('\n', '<br/>'), styles['Normal'])
             ])
         
         if len(timeline_data) > 1:  # Has data beyond header
@@ -726,21 +734,46 @@ class EventProposalReport:
         if sessions and isinstance(sessions, list):
             story.append(Paragraph("<b>Session Schedule</b>", styles['CustomHeading2']))
             
-            session_data = [['Time', 'Session', 'Room', 'Speaker']]
+            # Build session data with Paragraphs for proper text wrapping
+            session_data = [
+                [Paragraph('<b>Time</b>', styles['Normal']), 
+                 Paragraph('<b>Session</b>', styles['Normal']), 
+                 Paragraph('<b>Room</b>', styles['Normal']), 
+                 Paragraph('<b>Speaker</b>', styles['Normal'])]
+            ]
             
             for session in sessions[:20]:  # Limit to 20 sessions
                 if not isinstance(session, dict):
                     continue
                     
+                # Format time with date if available
+                start_time = session.get('start_time', '')
+                end_time = session.get('end_time', '')
+                date = session.get('date', '')
+                
+                time_str = f"{start_time} - {end_time}" if start_time and end_time else 'TBD'
+                if date:
+                    time_str = f"{date}<br/>{time_str}"
+                
+                session_name = str(session.get('name', session.get('session_name', 'N/A')))
+                room = str(session.get('room', 'N/A'))
+                speaker = str(session.get('speaker', 'N/A'))
+                
+                # Truncate long text to prevent overflow, but use Paragraph for multi-line support
+                time_para = Paragraph(time_str, styles['Normal'])
+                session_para = Paragraph(session_name[:60] + ('...' if len(session_name) > 60 else ''), styles['Normal'])
+                room_para = Paragraph(room[:30] + ('...' if len(room) > 30 else ''), styles['Normal'])
+                speaker_para = Paragraph(speaker[:30] + ('...' if len(speaker) > 30 else ''), styles['Normal'])
+                
                 session_data.append([
-                    f"{session.get('start_time', '')} - {session.get('end_time', '')}",
-                    session.get('name', session.get('session_name', 'N/A')),
-                    session.get('room', 'N/A'),
-                    session.get('speaker', 'N/A')
+                    time_para,
+                    session_para,
+                    room_para,
+                    speaker_para
                 ])
             
             if len(session_data) > 1:  # Has data beyond header
-                session_table = Table(session_data, colWidths=[1.2*inch, 2.3*inch, 1.5*inch, 1.5*inch])
+                session_table = Table(session_data, colWidths=[1.3*inch, 2.5*inch, 1.3*inch, 1.4*inch])
                 session_table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), self.accent_color),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -753,12 +786,68 @@ class EventProposalReport:
                     ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                     ('FONTSIZE', (0, 1), (-1, -1), 9),
                     ('PADDING', (0, 1), (-1, -1), 8),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, self.light_gray]),
                     ('GRID', (0, 0), (-1, -1), 0, colors.white),
                     ('LINEBELOW', (0, 0), (-1, -1), 0.5, self.light_gray),
                 ]))
                 
                 story.append(session_table)
+        
+        return story
+    
+    def _create_logo_section(self, final_plan: Dict[str, Any], specialist_outputs: Dict[str, Any], styles) -> List:
+        """Create logo section if logo was generated."""
+        story = []
+        
+        # Check for logo in specialist outputs
+        logo_path = None
+        logo_info = None
+        
+        if specialist_outputs:
+            logo_data = specialist_outputs.get('logo', {})
+            if isinstance(logo_data, str):
+                try:
+                    logo_data = json.loads(logo_data)
+                except:
+                    logo_data = {}
+            
+            if isinstance(logo_data, dict):
+                logo_path = logo_data.get('logo_file_path') or logo_data.get('logo_url')
+                logo_info = logo_data
+        
+        if not logo_path:
+            return story  # No logo, return empty story
+        
+        story.append(Paragraph("<b>Event Logo</b>", styles['CustomHeading1']))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Try to add logo image if file exists
+        if logo_path and os.path.exists(logo_path):
+            try:
+                from reportlab.platypus import Image
+                img = Image(logo_path, width=3*inch, height=3*inch, kind='proportional')
+                story.append(img)
+                story.append(Spacer(1, 0.2*inch))
+            except Exception as e:
+                # If image loading fails, just show the path
+                story.append(Paragraph(f"Logo file: {logo_path}", styles['CustomBodyText']))
+        
+        # Add logo information if available
+        if logo_info:
+            if logo_info.get('design_rationale'):
+                story.append(Paragraph("<b>Design Rationale</b>", styles['CustomHeading2']))
+                story.append(Paragraph(str(logo_info['design_rationale']), styles['CustomBodyText']))
+                story.append(Spacer(1, 0.1*inch))
+            
+            if logo_info.get('color_palette'):
+                story.append(Paragraph("<b>Color Palette</b>", styles['CustomHeading2']))
+                palette = logo_info['color_palette']
+                if isinstance(palette, list):
+                    palette_text = ', '.join(str(c) for c in palette)
+                else:
+                    palette_text = str(palette)
+                story.append(Paragraph(palette_text, styles['CustomBodyText']))
         
         return story
     
@@ -797,10 +886,13 @@ class EventProposalReport:
             if len(mitigation) > 120:
                 mitigation = mitigation[:117] + "..."
             
+            # Wrap mitigation text in Paragraph for proper formatting
+            mitigation_para = Paragraph(mitigation.replace('\n', '<br/>'), styles['Normal'])
+            
             risk_data.append([
-                risk_text,
+                Paragraph(risk_text.replace('\n', '<br/>'), styles['Normal']),
                 Paragraph(f"<font color='{severity_color.hexval()}'><b>{severity.upper()}</b></font>", styles['Normal']),
-                mitigation
+                mitigation_para
             ])
         
         if len(risk_data) > 1:  # Has data beyond header
@@ -860,15 +952,18 @@ class EventProposalReport:
             if len(action) > 100:
                 action = action[:97] + "..."
             
+            # Wrap action text in Paragraph for proper formatting
+            action_para = Paragraph(action.replace('\n', '<br/>'), styles['Normal'])
+            
             action_data.append([
                 Paragraph(priority_text, styles['Normal']),
-                action,
-                item.get('owner', 'TBD'),
-                item.get('deadline', 'TBD')
+                action_para,
+                Paragraph(str(item.get('owner', 'TBD')).replace('\n', '<br/>'), styles['Normal']),
+                Paragraph(str(item.get('deadline', 'TBD')).replace('\n', '<br/>'), styles['Normal'])
             ])
         
         if len(action_data) > 1:  # Has data beyond header
-            action_table = Table(action_data, colWidths=[1*inch, 3*inch, 1.25*inch, 1.25*inch])
+            action_table = Table(action_data, colWidths=[1*inch, 2.8*inch, 1.3*inch, 1.4*inch])
             action_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), self.accent_color),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -902,7 +997,7 @@ class EventProposalReport:
         # Header with accent color
         canvas.setFont('Helvetica-Bold', 10)
         canvas.setFillColor(self.accent_color)
-        canvas.drawString(0.75*inch, doc.height + doc.topMargin + 0.3*inch, "AI Event Planner")
+        canvas.drawString(0.75*inch, doc.height + doc.topMargin + 0.3*inch, "Évènement.ai")
         
         # Subtle line separator
         canvas.setStrokeColor(self.light_gray)
