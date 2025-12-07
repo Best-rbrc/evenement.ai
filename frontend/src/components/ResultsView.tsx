@@ -34,6 +34,8 @@ import { ScheduleTimeline } from './ScheduleTimeline';
 import { EventMap } from './EventMap';
 import { ExportMenu } from './ExportMenu';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 interface ResultsViewProps {
   result: EventPlanResult;
   onStartOver: () => void;
@@ -101,11 +103,26 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
           <CardContent className="p-0">
             <div className="grid grid-cols-1 lg:grid-cols-2">
               {/* Event Info */}
-              <div className="p-8">
+              <div className="p-8 relative">
+                {/* Logo in top right corner of event info section */}
+                {result.exports?.logoFile && result.exports.logoFile !== 'Error' && (
+                  <div className="absolute top-4 right-4 w-20 h-20 z-10">
+                    <img 
+                      src={`${API_BASE_URL}/api/files/${encodeURIComponent(
+                        result.exports.logoFile.replace(/^event_outputs[\/\\]/, '')
+                      )}`}
+                      alt={`${result.eventDetails.name} Logo`}
+                      className="w-full h-full object-contain bg-white/50 rounded-lg p-2 border border-border/50 shadow-sm"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
                 <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
                   {result.eventDetails.type}
                 </Badge>
-                <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
+                <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4 pr-24">
                   {result.eventDetails.name}
                 </h1>
                 <div className="grid grid-cols-2 gap-4">
