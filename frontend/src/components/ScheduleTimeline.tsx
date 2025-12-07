@@ -22,20 +22,26 @@ const typeConfig: Record<
 export function ScheduleTimeline({ schedule }: ScheduleTimelineProps) {
   return (
     <div className="relative">
-      {/* Timeline line */}
-      <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-accent to-sage" />
-
       <div className="space-y-4">
         {schedule.map((item, i) => {
           const config = typeConfig[item.type];
           const Icon = config.icon;
+          const isLast = i === schedule.length - 1;
 
           return (
             <div key={i} className="relative flex gap-4 items-start">
+              {/* Timeline line segment - only between items, not through icons */}
+              {!isLast && (
+                <div
+                  className="absolute left-6 top-12 w-0.5 bg-gradient-to-b from-primary via-accent to-sage z-0"
+                  style={{ height: 'calc(1rem + 1px)' }}
+                />
+              )}
+
               {/* Timeline dot */}
               <div
                 className={cn(
-                  'w-12 h-12 rounded-xl flex items-center justify-center shrink-0 z-10',
+                  'w-12 h-12 rounded-xl flex items-center justify-center shrink-0 relative z-10',
                   config.bg
                 )}
               >

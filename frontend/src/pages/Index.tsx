@@ -117,7 +117,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
       (formData?.startTime && formData?.endTime ? `${formData.startTime} - ${formData.endTime}` : 'Time TBD'),
     location:
       formData?.locationPreference || (finalPlan.location as string) || (eventDetailsSource?.location_preference as string) || 'Location TBD',
-    coords: (finalPlan.coords as EventPlanResult['eventDetails']['coords']) || (eventDetailsSource?.coords as any),
+    coords: formData?.locationCoords || (finalPlan.coords as EventPlanResult['eventDetails']['coords']) || (eventDetailsSource?.coords as any),
     guestCount:
       (eventDetailsSource?.guest_count as string) ||
       (formData ? `${formData.guestCountMin}-${formData.guestCountMax}` : 'Guest count TBD'),
