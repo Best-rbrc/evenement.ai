@@ -15,6 +15,7 @@ import {
   MessageSquare,
   CalendarCheck,
   FileText,
+  Image,
   CheckCircle2,
   Loader2,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   MessageSquare,
   CalendarCheck,
   FileText,
+  Image,
 };
 
 interface AgentProgressViewProps {

@@ -125,6 +125,7 @@ export interface EventPlanResult {
     calendarFile?: string;
     pdfFile?: string;
     formUrl?: string;
+    logoFile?: string;
   };
   success: boolean;
 }

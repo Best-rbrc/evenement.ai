@@ -8,18 +8,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Download, Copy, Calendar, FileText, Link as LinkIcon, Check } from 'lucide-react';
+import { Download, Copy, Calendar, FileText, Link as LinkIcon, Check, Image } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ExportMenuProps {
   calendarFile?: string;
   pdfFile?: string;
   formUrl?: string;
+  logoFile?: string;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-export function ExportMenu({ calendarFile, pdfFile, formUrl }: ExportMenuProps) {
+export function ExportMenu({ calendarFile, pdfFile, formUrl, logoFile }: ExportMenuProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
@@ -147,7 +148,55 @@ export function ExportMenu({ calendarFile, pdfFile, formUrl }: ExportMenuProps) 
     }
   };
 
-  const hasExports = (calendarFile && calendarFile !== 'Error') || pdfFile || formUrl;
+  const handleDownloadLogo = async () => {
+    if (!logoFile || logoFile === 'Error') {
+      toast({
+        title: 'Logo not available',
+        description: 'No logo was generated for this event.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Extract filename from path
+      const filename = logoFile.split('/').pop() || logoFile.split('\\').pop() || 'event-logo.png';
+      
+      // Remove 'event_outputs/' prefix if present
+      const filePath = logoFile.replace(/^event_outputs[\/\\]/, '');
+      
+      // Fetch the file from the backend
+      const response = await fetch(`${API_BASE_URL}/api/files/${encodeURIComponent(filePath)}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to download logo file: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: 'Logo downloaded',
+        description: `Downloaded ${filename}`,
+      });
+    } catch (error) {
+      console.error('Logo download error:', error);
+      toast({
+        title: 'Download failed',
+        description: 'Could not download logo file. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const hasExports = (calendarFile && calendarFile !== 'Error') || pdfFile || formUrl || (logoFile && logoFile !== 'Error');
 
   if (!hasExports) {
     return (
@@ -194,6 +243,12 @@ export function ExportMenu({ calendarFile, pdfFile, formUrl }: ExportMenuProps) 
                 <span>Copy Registration Link</span>
               </>
             )}
+          </DropdownMenuItem>
+        )}
+        {logoFile && logoFile !== 'Error' && (
+          <DropdownMenuItem onClick={handleDownloadLogo}>
+            <Image className="mr-2 h-4 w-4" />
+            <span>Download Logo (.png)</span>
           </DropdownMenuItem>
         )}
         {!hasExports && (

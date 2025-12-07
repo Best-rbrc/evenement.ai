@@ -55,7 +55,7 @@ def setup_workflow_logger():
 AGENT_SCHEMAS = {
     "planning": {
         "analysis": "string",
-        "required_agents": ["venue", "catering", "programme", "speakers", "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form"],
+        "required_agents": ["venue", "catering", "programme", "speakers", "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form", "logo"],
         "execution_order_rationale": "string",
         "special_considerations": ["string"],
     },
@@ -158,6 +158,16 @@ AGENT_SCHEMAS = {
         "form_url": "string",
         "status": "success|error",
         "message": "string|null",
+    },
+    "logo": {
+        "status": "success|error",
+        "logo_file_path": "string",
+        "logo_url": "string",
+        "design_rationale": "string",
+        "color_palette": "string",
+        "typography_suggestions": "string",
+        "usage_guidelines": ["string"],
+        "branding_recommendations": ["string"],
     },
     "final_plan": {
         "executive_summary": "string",
@@ -1020,9 +1030,10 @@ Use handoffs if needed to refine or add information. Then provide your final syn
             fs_server = None
             _fs_server_ref = None
     
-    # Create calendar and form agents now (not part of Phase 2 coordinator selection)
+    # Create calendar, form, and logo agents now (not part of Phase 2 coordinator selection)
     from custom_agents.calendar_agent import create_calendar_agent
     from custom_agents.form_agent import create_form_agent
+    from custom_agents.logo_agent import create_logo_agent
     
     # Calendar agent: use sandboxed filesystem MCP (if available)
     print(f"DEBUG: fs_server = {fs_server}, type = {type(fs_server)}\n")
@@ -1033,9 +1044,10 @@ Use handoffs if needed to refine or add information. Then provide your final syn
     # - unsandboxed path: pass None so form_agent uses mcp-remote internally
     form_agent = create_form_agent(mcp_servers=tally_server if USE_SANDBOXED_FORMS else None)
     
-    # Add calendar and form agents to status tracking
+    # Add calendar, form, and logo agents to status tracking
     agent_statuses.append({"name": "calendar", "status": "pending"})
     agent_statuses.append({"name": "form", "status": "pending"})
+    agent_statuses.append({"name": "logo", "status": "pending"})
     update_progress("phase_4", "Generating Outputs", "in_progress", 
                    agents=agent_statuses.copy(),
                    current_agent="calendar",
@@ -1276,11 +1288,124 @@ Output JSON with:
                            current_agent=None,
                            message="Form creation failed")
     
+    # Create logo
+    logo_agent = create_logo_agent()
+    
+    # Update logo agent status
+    for agent_stat in agent_statuses:
+        if agent_stat["name"] == "logo":
+            agent_stat["status"] = "working"
+    update_progress("phase_4", "Generating Outputs", "in_progress", 
+                   agents=agent_statuses.copy(),
+                   current_agent="logo",
+                   message="Generating logo...")
+    
+    print("Creating event logo...\n")
+    
+    logo_prompt = f"""You are the Logo Design Specialist for "{event_details['event_name']}".
+
+{get_current_date_context()}
+
+Event Details:
+{json.dumps(event_details, indent=2)}
+
+All Planning Outputs:
+{json.dumps(specialist_outputs, indent=2)}
+
+Final Plan:
+{final_result.final_output}
+
+Your task:
+Generate a professional logo for this event using the generate_logo_image() function.
+
+1. Extract event information:
+   - Event name: {event_details.get('event_name')}
+   - Event type: {event_details.get('event_type')}
+   - Event description: {event_details.get('event_description', '')}
+   - Style preferences: Consider the event type and target audience
+
+2. Generate the logo:
+   - Use generate_logo_image() with appropriate parameters
+   - Ensure the logo has a transparent background
+   - Create a design that represents the event's purpose and style
+
+3. Provide design information:
+   - Design rationale
+   - Color palette
+   - Typography suggestions
+   - Usage guidelines
+   - Branding recommendations
+
+Output JSON with:
+- status: "success" or "error"
+- logo_file_path: path to the generated logo file
+- logo_url: file URL
+- design_rationale: explanation of design choices
+- color_palette: color information
+- typography_suggestions: font recommendations
+- usage_guidelines: array of usage instructions
+- branding_recommendations: array of branding tips"""
+
+    logo_result = None
+    logo_data = {}
+    try:
+        logo_result = Runner.run_sync(logo_agent, logo_prompt, max_turns=AGENT_MAX_TURNS)
+        print("✅ Logo generated!\n")
+        
+        # Parse logo output
+        try:
+            logo_data = json.loads(logo_result.final_output)
+            if logo_data.get("status") == "success":
+                print(f"✅ Logo file created: {logo_data.get('logo_file_path')}\n")
+            else:
+                print(f"⚠️  Logo generation returned error status\n")
+        except json.JSONDecodeError:
+            # Try to extract JSON from markdown if present
+            output_str = logo_result.final_output
+            if '```json' in output_str:
+                json_str = output_str.split('```json')[1].split('```')[0].strip()
+                logo_data = json.loads(json_str)
+            else:
+                # Try to find JSON object in the output
+                import re
+                match = re.search(r'\{.*\}', output_str, re.DOTALL)
+                if match:
+                    logo_data = json.loads(match.group())
+                else:
+                    logo_data = {"status": "error", "message": "Could not parse logo output"}
+        
+        # Update logo agent status
+        for agent_stat in agent_statuses:
+            if agent_stat["name"] == "logo":
+                agent_stat["status"] = "done"
+        update_progress("phase_4", "Generating Outputs", "in_progress", 
+                       agents=agent_statuses.copy(),
+                       current_agent=None,
+                       message="Logo generated successfully")
+    except Exception as logo_ex:
+        import traceback
+        print(f"⚠️  Logo generation failed: {type(logo_ex).__name__}: {logo_ex}\n")
+        print(f"   Full traceback:\n")
+        traceback.print_exc()
+        print(f"\n   Continuing workflow without logo...\n")
+        logo_data = {
+            "status": "error",
+            "message": f"Logo generation failed: {str(logo_ex)}"
+        }
+        # Update logo agent status even on error
+        for agent_stat in agent_statuses:
+            if agent_stat["name"] == "logo":
+                agent_stat["status"] = "done"
+        update_progress("phase_4", "Generating Outputs", "in_progress", 
+                       agents=agent_statuses.copy(),
+                       current_agent=None,
+                       message="Logo generation completed (with errors)")
+    
     # Final update for Phase 4 completion
     update_progress("phase_4", "Generating Outputs", "completed", 
                    agents=agent_statuses.copy(),
                    current_agent=None,
-                   message="Calendar and registration form completed")
+                   message="Calendar, registration form, and logo completed")
     
     # ============================================================
     # PHASE 5: PDF REPORT GENERATION
@@ -1503,10 +1628,11 @@ Output JSON with:
         "planning_phase": validated_planning,
         "specialist_outputs": validated_specialist_outputs,
         "final_plan": final_plan_parsed,
-        "calendar_invite": calendar_result.final_output,
+        "calendar_invite": calendar_result.final_output if calendar_result else json.dumps({"status": "error"}),
         "registration_form": form_data,
+        "logo": logo_data,
         "pdf_report": pdf_path,
-        "agents_used": required_agents + ["calendar", "form"],
+        "agents_used": required_agents + ["calendar", "form", "logo"],
         "agent_statuses": agent_statuses,
         "success": True,
         "pdf_generated": pdf_generated,
