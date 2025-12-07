@@ -36,16 +36,74 @@ interface AgentProgressViewProps {
 }
 
 export function AgentProgressView({ agents }: AgentProgressViewProps) {
-  const completedCount = agents.filter((a) => a.status === 'completed').length;
-  const overallProgress = (completedCount / agents.length) * 100;
+  // Check if we're in the initial "orchestrator selecting" phase
+  const hasStartedWork = agents.some(a => a.status !== 'pending');
+  
+  // Only show agents that have been selected (not pending before they start)
+  const activeAgents = agents.filter(a => a.status !== 'pending' || hasStartedWork);
+  
+  const completedCount = activeAgents.filter((a) => a.status === 'completed').length;
+  const overallProgress = activeAgents.length > 0 ? (completedCount / activeAgents.length) * 100 : 0;
 
   return (
     <div className="max-w-4xl mx-auto px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-8"
-      >
+      {/* Show orchestrator phase before any agents are selected */}
+      {!hasStartedWork && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-12 py-12"
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="flex justify-center mb-8"
+          >
+            <div className="relative w-32 h-32">
+              {/* Rotating ring */}
+              <motion.div
+                className="absolute inset-0 rounded-full border-4 border-dashed border-primary/30"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+              />
+              {/* Pulsing core */}
+              <motion.div
+                className="absolute inset-4 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center"
+                animate={{ scale: [1, 1.05, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <motion.div
+                  className="w-16 h-16 rounded-full bg-gradient-to-br from-soft-coral to-rose-gold flex items-center justify-center"
+                  animate={{ rotate: -360 }}
+                  transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
+                >
+                  <Sparkles className="w-8 h-8 text-primary-foreground" />
+                </motion.div>
+              </motion.div>
+            </div>
+          </motion.div>
+          
+          <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-3">
+            Orchestrator is Deciding
+          </h2>
+          <p className="text-lg text-muted-foreground mb-2">
+            Analyzing your event requirements...
+          </p>
+          <p className="text-base text-muted-foreground/80">
+            The orchestrator is choosing which specialized workers are needed for your event.
+          </p>
+        </motion.div>
+      )}
+
+      {/* Show agents once they've been selected */}
+      {hasStartedWork && (
+        <>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-8"
+        >
         <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">
           AI Agents at Work
         </h2>
@@ -61,7 +119,7 @@ export function AgentProgressView({ agents }: AgentProgressViewProps) {
           </div>
           <Progress value={overallProgress} className="h-3" />
         </div>
-      </motion.div>
+        </motion.div>
 
       {/* Central Animation */}
       <motion.div
@@ -119,7 +177,7 @@ export function AgentProgressView({ agents }: AgentProgressViewProps) {
       {/* Agent Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <AnimatePresence mode="popLayout">
-          {agents.map((agent, index) => {
+          {activeAgents.map((agent, index) => {
             const Icon = iconMap[agent.icon] || Sparkles;
             
             return (
@@ -208,6 +266,8 @@ export function AgentProgressView({ agents }: AgentProgressViewProps) {
           })}
         </AnimatePresence>
       </div>
+        </>
+      )}
     </div>
   );
 }

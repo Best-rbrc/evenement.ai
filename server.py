@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import asyncio
 import os
+import json
 from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from workflows.event_planning_workflow import run_event_planning
@@ -33,6 +35,15 @@ app.add_middleware(
 
 # Simple in-memory cache for the last successful result (dev testing only)
 _last_result_cache: Optional[dict] = None
+
+# Progress tracking for real-time updates
+_current_progress: dict = {
+    "phase": "idle",
+    "status": "waiting",
+    "agents": [],
+    "current_agent": None,
+    "message": ""
+}
 
 
 class EventRequest(BaseModel):
@@ -105,6 +116,13 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/api/plan/status")
+async def plan_status() -> dict:
+    """Get current planning progress status."""
+    global _current_progress
+    return _current_progress
+
+
 @app.get("/api/plan/last")
 async def get_last_plan():
     """Return the last successful plan result from cache (dev testing only)."""
@@ -117,7 +135,7 @@ async def get_last_plan():
 
 @app.post("/api/plan", response_model=PlanResponse)
 async def create_plan(payload: EventRequest) -> PlanResponse:
-    global _last_result_cache
+    global _last_result_cache, _current_progress
     
     # Map incoming payload to the existing workflow schema
     event_details = map_request_to_workflow_payload(payload)
@@ -127,16 +145,37 @@ async def create_plan(payload: EventRequest) -> PlanResponse:
     os.environ["EVENT_PLANNER_ENABLE_SANDBOX"] = "1" if payload.enableSandbox else "0"
     os.environ["EVENT_PLANNER_ENABLE_SMS"] = "1" if payload.enableSMS else "0"
     
+    # Initialize progress tracking
+    _current_progress = {
+        "phase": "phase_1",
+        "phase_name": "Coordinator Planning",
+        "status": "in_progress",
+        "agents": [],
+        "current_agent": None,
+        "message": "Analyzing event requirements..."
+    }
+    
     # Run the long-running workflow in a worker thread to avoid blocking the loop
     try:
-        result = await asyncio.to_thread(run_event_planning, event_details)
+        # Create a thread-safe copy of progress tracker reference
+        progress_ref = _current_progress
+        result = await asyncio.to_thread(run_event_planning, event_details, progress_ref)
     except Exception as exc:  # noqa: BLE001 - surface full error to client
+        _current_progress["status"] = "error"
+        _current_progress["message"] = str(exc)
+        import traceback
+        print(f"\n⚠️  Workflow error: {exc}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(exc))
 
     response = PlanResponse(status="ok", event_details=event_details, result=result)
     
     # Cache the successful result
     _last_result_cache = response.model_dump()
+    
+    # Mark as complete
+    _current_progress["status"] = "completed"
+    _current_progress["phase"] = "complete"
     
     return response
 
