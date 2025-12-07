@@ -202,7 +202,16 @@ async def voice_to_form(payload: VoiceInput) -> dict:
     server_logger.info("=" * 80)
     server_logger.info("🎤 /api/voice-to-form called")
     server_logger.info(f"Transcript length: {transcript_len}")
-    server_logger.info(f"Transcript preview: {payload.transcript[:200] if payload.transcript else ''}")
+    server_logger.info(f"Full transcript: {payload.transcript}")
+    print(f"\n🎤 /api/voice-to-form endpoint called")
+    print(f"   Transcript length: {transcript_len}")
+    print(f"   Transcript: {payload.transcript}")
+    
+    if not payload.transcript or not payload.transcript.strip():
+        server_logger.warning("⚠️ Empty transcript received")
+        print("⚠️ Empty transcript received")
+        raise HTTPException(status_code=400, detail="Transcript cannot be empty")
+    
     try:
         system_prompt = """You are an AI assistant that extracts event planning details from natural speech transcripts.
 
@@ -252,21 +261,30 @@ IMPORTANT RULES:
 
         result = json.loads(response.choices[0].message.content)
         server_logger.info("Parsed fields from transcript:")
+        print("\n✅ Successfully parsed voice transcript:")
         for key, value in result.items():
             server_logger.info(f"  - {key}: {value}")
+            print(f"   {key}: {value}")
         server_logger.info("=" * 80)
+        print("=" * 80)
         return result
         
     except json.JSONDecodeError as exc:
         server_logger.error(f"JSON decode failed: {exc}")
         server_logger.error(f"Raw message content: {response.choices[0].message.content if 'response' in locals() else 'N/A'}")
         server_logger.error("=" * 80)
+        print(f"\n❌ JSON decode error: {exc}")
+        print(f"   Raw content: {response.choices[0].message.content if 'response' in locals() else 'N/A'}")
         raise HTTPException(status_code=500, detail="Failed to parse AI response as JSON")
     except Exception as exc:
         import traceback
+        error_trace = traceback.format_exc()
         server_logger.error(f"Voice dictation error: {exc}")
-        server_logger.error(traceback.format_exc())
+        server_logger.error(error_trace)
         server_logger.error("=" * 80)
+        print(f"\n❌ Voice dictation error: {exc}")
+        print(error_trace)
+        print("=" * 80)
         raise HTTPException(status_code=500, detail=f"Failed to process voice input: {str(exc)}")
 
 
