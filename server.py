@@ -197,6 +197,12 @@ async def get_file(file_path: str):
 @app.post("/api/voice-to-form")
 async def voice_to_form(payload: VoiceInput) -> dict:
     """Parse voice transcript and extract event details using OpenAI."""
+    # Basic request diagnostics
+    transcript_len = len(payload.transcript or "")
+    server_logger.info("=" * 80)
+    server_logger.info("🎤 /api/voice-to-form called")
+    server_logger.info(f"Transcript length: {transcript_len}")
+    server_logger.info(f"Transcript preview: {payload.transcript[:200] if payload.transcript else ''}")
     try:
         system_prompt = """You are an AI assistant that extracts event planning details from natural speech transcripts.
 
@@ -239,12 +245,28 @@ IMPORTANT RULES:
             temperature=0.1
         )
         
+        # Log raw response metadata (not the whole content to avoid noise)
+        server_logger.info("OpenAI response received")
+        server_logger.info(f"  model: {response.model}")
+        server_logger.info(f"  finish_reason: {response.choices[0].finish_reason}")
+
         result = json.loads(response.choices[0].message.content)
-        server_logger.info(f"Voice dictation parsed: {result}")
+        server_logger.info("Parsed fields from transcript:")
+        for key, value in result.items():
+            server_logger.info(f"  - {key}: {value}")
+        server_logger.info("=" * 80)
         return result
         
+    except json.JSONDecodeError as exc:
+        server_logger.error(f"JSON decode failed: {exc}")
+        server_logger.error(f"Raw message content: {response.choices[0].message.content if 'response' in locals() else 'N/A'}")
+        server_logger.error("=" * 80)
+        raise HTTPException(status_code=500, detail="Failed to parse AI response as JSON")
     except Exception as exc:
+        import traceback
         server_logger.error(f"Voice dictation error: {exc}")
+        server_logger.error(traceback.format_exc())
+        server_logger.error("=" * 80)
         raise HTTPException(status_code=500, detail=f"Failed to process voice input: {str(exc)}")
 
 
@@ -324,6 +346,8 @@ async def create_plan(payload: EventRequest) -> PlanResponse:
         _current_progress["agents"] = result["agent_statuses"]
     _current_progress["current_agent"] = None
     _current_progress["message"] = "Event planning completed successfully"
+    
+    server_logger.info("="*80)
     
     return response
 
