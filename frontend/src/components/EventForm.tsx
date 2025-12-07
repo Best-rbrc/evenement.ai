@@ -246,7 +246,9 @@ export function EventForm({ onSubmit }: EventFormProps) {
                     <Input type="time" {...register('startTime')} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="endTime">End Time</Label>
+                    <Label htmlFor="endTime" className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> End Time
+                    </Label>
                     <Input type="time" {...register('endTime')} />
                   </div>
                 </div>

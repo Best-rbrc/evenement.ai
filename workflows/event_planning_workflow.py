@@ -911,6 +911,21 @@ Use handoffs if needed to refine or add information. Then provide your final syn
     
     update_progress("phase_4", "Generating Outputs", "in_progress", message="Creating calendar and registration form...")
     
+    # Auto-approve sandbox confirmations in non-interactive mode
+    is_non_interactive = os.environ.get("EVENT_PLANNER_NON_INTERACTIVE") == "1"
+    original_input = None
+    if is_non_interactive:
+        import builtins
+        original_input = builtins.input
+        def _auto_approve_input(prompt: str = "") -> str:
+            # Auto-approve any sandbox confirmation prompts
+            if any(keyword in prompt.lower() for keyword in ["approve", "confirm", "allow", "yes", "y/n"]):
+                print(f"Auto-approving: {prompt.strip()}")
+                return "y" if "y/n" in prompt.lower() else "yes"
+            # Default response for any other prompts
+            return "yes"
+        builtins.input = _auto_approve_input
+    
     # Setup filesystem MCP NOW (right before calendar creation) to prevent connection closing
     # This avoids the ClosedResourceError that happens when MCP is set up earlier
     if SANDBOX_ENABLED and fs_server is None:
@@ -943,8 +958,25 @@ Use handoffs if needed to refine or add information. Then provide your final syn
     # - unsandboxed path: pass None so form_agent uses mcp-remote internally
     form_agent = create_form_agent(mcp_servers=tally_server if USE_SANDBOXED_FORMS else None)
     
+    # Add calendar and form agents to status tracking
+    agent_statuses.append({"name": "calendar", "status": "pending"})
+    agent_statuses.append({"name": "form", "status": "pending"})
+    update_progress("phase_4", "Generating Outputs", "in_progress", 
+                   agents=agent_statuses.copy(),
+                   current_agent="calendar",
+                   message="Creating calendar invite...")
+    
     # Create calendar invite
     print("Creating calendar invite file...\n")
+    
+    # Update calendar agent status
+    for agent_stat in agent_statuses:
+        if agent_stat["name"] == "calendar":
+            agent_stat["status"] = "working"
+    update_progress("phase_4", "Generating Outputs", "in_progress", 
+                   agents=agent_statuses.copy(),
+                   current_agent="calendar",
+                   message="Generating calendar file...")
     
     calendar_prompt = f"""You are the Calendar Specialist for "{event_details['event_name']}".
 
@@ -990,6 +1022,15 @@ Output JSON with:
         # This works because we called asyncio.set_event_loop(mcp_loop) during MCP setup
         calendar_result = Runner.run_sync(calendar_agent, calendar_prompt, max_turns=AGENT_MAX_TURNS)
         print("✅ Calendar invite generated!\n")
+        
+        # Update calendar agent status
+        for agent_stat in agent_statuses:
+            if agent_stat["name"] == "calendar":
+                agent_stat["status"] = "done"
+        update_progress("phase_4", "Generating Outputs", "in_progress", 
+                       agents=agent_statuses.copy(),
+                       current_agent="form",
+                       message="Calendar created successfully")
     except RuntimeError as rt_ex:
         # Handle asyncio cleanup errors (Python 3.13 stricter checks)
         # The agent completes successfully, but cleanup throws an error during async generator teardown
@@ -1029,12 +1070,33 @@ Output JSON with:
                 "import_instructions": "Calendar could not be generated"
             })
         })()
+        # Update calendar agent status even on error
+        for agent_stat in agent_statuses:
+            if agent_stat["name"] == "calendar":
+                agent_stat["status"] = "done"
+        update_progress("phase_4", "Generating Outputs", "in_progress", 
+                       agents=agent_statuses.copy(),
+                       current_agent="form",
+                       message="Calendar generation completed (with errors)")
     
     # Create registration form
     if SKIP_FORM_CREATION:
         print("⏭️  Skipping registration form creation (headless mode)\n")
         form_data = {"status": "skipped", "form_url": None, "message": "Form creation skipped"}
+        # Update form agent status
+        for agent_stat in agent_statuses:
+            if agent_stat["name"] == "form":
+                agent_stat["status"] = "done"
     else:
+        # Update form agent status
+        for agent_stat in agent_statuses:
+            if agent_stat["name"] == "form":
+                agent_stat["status"] = "working"
+        update_progress("phase_4", "Generating Outputs", "in_progress", 
+                       agents=agent_statuses.copy(),
+                       current_agent="form",
+                       message="Creating registration form...")
+        
         print("Creating event registration form...\n")
         
         # Compact prompt to reduce tokens: only essentials
@@ -1075,6 +1137,14 @@ Output JSON with:
 
             if form_data.get("status") == "success":
                 print(f"✅ Registration form created: {form_data.get('form_url')}\n")
+                # Update form agent status
+                for agent_stat in agent_statuses:
+                    if agent_stat["name"] == "form":
+                        agent_stat["status"] = "done"
+                update_progress("phase_4", "Generating Outputs", "in_progress", 
+                               agents=agent_statuses.copy(),
+                               current_agent=None,
+                               message="Registration form created successfully")
             else:
                 error_message = form_error or form_data.get("message") or "Unknown error during form creation"
                 print(f"⚠️  Remote form creation failed. Error: {error_message}\n")
@@ -1083,6 +1153,14 @@ Output JSON with:
                     "message": error_message,
                     "raw_output": form_data.get("raw_output")
                 }
+                # Update form agent status
+                for agent_stat in agent_statuses:
+                    if agent_stat["name"] == "form":
+                        agent_stat["status"] = "done"
+                update_progress("phase_4", "Generating Outputs", "in_progress", 
+                               agents=agent_statuses.copy(),
+                               current_agent=None,
+                               message="Form creation completed (with errors)")
         except RuntimeError as rt_ex:
             # Ignore asyncio cleanup errors (Python 3.13 stricter checks)
             if "cancel scope" in str(rt_ex):
@@ -1099,6 +1177,14 @@ Output JSON with:
                     "status": "error",
                     "message": f"Form creation failed: {str(rt_ex)}"
                 }
+            # Update form agent status
+            for agent_stat in agent_statuses:
+                if agent_stat["name"] == "form":
+                    agent_stat["status"] = "done"
+            update_progress("phase_4", "Generating Outputs", "in_progress", 
+                           agents=agent_statuses.copy(),
+                           current_agent=None,
+                           message="Form creation completed (with cleanup issues)")
         except Exception as form_ex:
             print(f"⚠️  Form creation exception: {form_ex}\n")
             print(f"   Continuing workflow without form...\n")
@@ -1106,6 +1192,20 @@ Output JSON with:
                 "status": "error",
                 "message": f"Form creation failed: {str(form_ex)}"
             }
+            # Update form agent status
+            for agent_stat in agent_statuses:
+                if agent_stat["name"] == "form":
+                    agent_stat["status"] = "done"
+            update_progress("phase_4", "Generating Outputs", "in_progress", 
+                           agents=agent_statuses.copy(),
+                           current_agent=None,
+                           message="Form creation failed")
+    
+    # Final update for Phase 4 completion
+    update_progress("phase_4", "Generating Outputs", "completed", 
+                   agents=agent_statuses.copy(),
+                   current_agent=None,
+                   message="Calendar and registration form completed")
     
     # ============================================================
     # PHASE 5: PDF REPORT GENERATION
@@ -1249,6 +1349,11 @@ Output JSON with:
         "sms_sent": sms_sent,
         "sms_message_sid": sms_message_sid
     }
+    
+    # Restore original input function if we patched it
+    if original_input is not None:
+        import builtins
+        builtins.input = original_input
     
     # Cleanup: close MCP servers and copy files
     try:

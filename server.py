@@ -16,7 +16,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 
 from workflows.event_planning_workflow import run_event_planning
@@ -155,6 +155,36 @@ async def get_last_plan():
     return _last_result_cache
 
 
+@app.get("/api/files/{file_path:path}")
+async def get_file(file_path: str):
+    """Serve files from event_outputs directory."""
+    import os
+    from pathlib import Path
+    
+    # Security: prevent directory traversal
+    if '..' in file_path or file_path.startswith('/'):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    
+    # Construct full path
+    event_outputs_dir = Path(__file__).parent / "event_outputs"
+    full_path = event_outputs_dir / file_path
+    
+    # Ensure file is within event_outputs directory
+    try:
+        full_path.resolve().relative_to(event_outputs_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(
+        path=str(full_path),
+        filename=full_path.name,
+        media_type='application/octet-stream'
+    )
+
+
 @app.post("/api/plan", response_model=PlanResponse)
 async def create_plan(payload: EventRequest) -> PlanResponse:
     global _last_result_cache, _current_progress
@@ -223,9 +253,14 @@ async def create_plan(payload: EventRequest) -> PlanResponse:
     # Cache the successful result
     _last_result_cache = response.model_dump()
     
-    # Mark as complete
+    # Mark as complete and include final agent statuses
     _current_progress["status"] = "completed"
     _current_progress["phase"] = "complete"
+    # Include final agent statuses from the result
+    if result.get("agent_statuses"):
+        _current_progress["agents"] = result["agent_statuses"]
+    _current_progress["current_agent"] = None
+    _current_progress["message"] = "Event planning completed successfully"
     
     return response
 
