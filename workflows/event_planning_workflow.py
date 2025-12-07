@@ -863,7 +863,7 @@ Your task for PHASE 3 - FINALIZATION:
 {{
   "executive_summary": "...",
   "timeline": [
-    {{"phase": "...", "tasks": [...], "deadline": "..."}}
+    {{"phase": "Phase name (e.g., 'Pre-Event Planning', 'Event Execution', 'Post-Event')", "tasks": ["Task 1", "Task 2", ...], "deadline": "YYYY-MM-DD"}}
   ],
   "schedule": {{
     "optimized": true/false,
@@ -1219,21 +1219,62 @@ Output JSON with:
     try:
         from tools.report_generator import generate_event_proposal_pdf
         
-        # Validate final plan against schema
+        # Validate final plan against schema (this enforces timeline field)
         try:
             final_plan_dict = validate_agent_output("final_plan", final_result.final_output)
+            print(f"✅ Final plan validated successfully (includes timeline: {bool(final_plan_dict.get('timeline'))})")
         except ValueError as e:
             print(f"⚠️  Final plan schema validation error: {e}")
-            print(f"   Using raw output for PDF generation...")
-            final_plan_dict = final_result.final_output
-            if isinstance(final_plan_dict, str):
+            print(f"   This means the coordinator did not generate all required fields (including timeline)")
+            print(f"   Attempting to parse and add missing fields...")
+            # Try to parse anyway
+            parsed = final_result.final_output
+            if isinstance(parsed, str):
                 try:
-                    final_plan_dict = json.loads(final_plan_dict)
+                    parsed = json.loads(parsed)
                 except:
-                    final_plan_dict = {
-                        "executive_summary": final_result.final_output[:1000],
-                        "assumptions": ["Unable to parse full plan structure"]
-                    }
+                    try:
+                        if '```json' in parsed:
+                            json_str = parsed.split('```json')[1].split('```')[0].strip()
+                        elif '```' in parsed:
+                            json_str = parsed.split('```')[1].split('```')[0].strip()
+                        else:
+                            import re
+                            match = re.search(r'\{.*\}', parsed, re.DOTALL)
+                            if match:
+                                json_str = match.group(0)
+                            else:
+                                raise ValueError("No JSON found")
+                        parsed = json.loads(json_str)
+                    except:
+                        parsed = {}
+            
+            if not isinstance(parsed, dict):
+                parsed = {}
+            
+            # Ensure all required schema fields exist (add empty defaults if missing)
+            schema = AGENT_SCHEMAS.get("final_plan", {})
+            for key in schema.keys():
+                if key not in parsed:
+                    print(f"   Adding missing field: {key}")
+                    if key == "timeline":
+                        parsed[key] = []
+                    elif key == "schedule":
+                        parsed[key] = {"optimized": False, "sessions": []}
+                    elif key == "budget":
+                        parsed[key] = {"total_available": 0, "total_allocated": 0, "by_category": {}, "status": "unknown"}
+                    elif key == "recommendations":
+                        parsed[key] = {}
+                    elif key == "risks":
+                        parsed[key] = []
+                    elif key == "action_items":
+                        parsed[key] = []
+                    elif key == "assumptions":
+                        parsed[key] = []
+                    else:
+                        parsed[key] = ""
+            
+            final_plan_dict = parsed
         
         pdf_path = generate_event_proposal_pdf(
             event_details=event_details,
@@ -1333,12 +1374,44 @@ Output JSON with:
             print(f"⚠️  Final validation error for {agent_name}: {e}")
             validated_specialist_outputs[agent_name] = output
     
+    # Parse and validate final_plan before returning
+    final_plan_parsed = final_result.final_output
+    if isinstance(final_plan_parsed, str):
+        try:
+            final_plan_parsed = json.loads(final_plan_parsed)
+        except json.JSONDecodeError:
+            # Try extracting JSON from markdown
+            try:
+                if '```json' in final_plan_parsed:
+                    json_str = final_plan_parsed.split('```json')[1].split('```')[0].strip()
+                elif '```' in final_plan_parsed:
+                    json_str = final_plan_parsed.split('```')[1].split('```')[0].strip()
+                else:
+                    import re
+                    match = re.search(r'\{.*\}', final_plan_parsed, re.DOTALL)
+                    if match:
+                        json_str = match.group(0)
+                    else:
+                        raise ValueError("No JSON found")
+                final_plan_parsed = json.loads(json_str)
+            except:
+                final_plan_parsed = {"executive_summary": final_plan_parsed[:1000]}
+    
+    # Validate final_plan has required structure
+    if not isinstance(final_plan_parsed, dict):
+        final_plan_parsed = {"executive_summary": str(final_plan_parsed)[:1000]}
+    
+    # Ensure timeline exists (even if empty)
+    if "timeline" not in final_plan_parsed:
+        print("⚠️  Warning: Coordinator did not generate timeline in final plan")
+        final_plan_parsed["timeline"] = []
+    
     # Return comprehensive results
     result = {
         "event_details": event_details,
         "planning_phase": validated_planning,
         "specialist_outputs": validated_specialist_outputs,
-        "final_plan": final_result.final_output,
+        "final_plan": final_plan_parsed,
         "calendar_invite": calendar_result.final_output,
         "registration_form": form_data,
         "pdf_report": pdf_path,

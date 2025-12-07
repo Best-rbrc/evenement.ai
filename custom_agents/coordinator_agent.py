@@ -81,7 +81,7 @@ OUTPUT REQUIREMENTS:
 Final plan structure:
 {{
   "executive_summary": "2-3 paragraph overview",
-  "timeline": [{{"phase": "...", "tasks": [...], "deadline": "..."}}],
+  "timeline": [{{"phase": "Phase name (e.g., 'Pre-Event Planning', 'Event Execution', 'Post-Event')", "tasks": ["Task 1", "Task 2", ...], "deadline": "YYYY-MM-DD"}}],
   "schedule": {{
     "optimized": true/false,
     "sessions": [...],  // Include if Scheduling Agent was used
