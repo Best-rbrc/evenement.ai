@@ -387,7 +387,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     title: item.bio || '',
     company: item.company || '',
     topic: item.ideal_role || item.topic || '',
-    fee: String(item.estimated_fee || ''),
+    fee: formatPrice(item.estimated_fee || ''),
     image: item.image,
   }));
 

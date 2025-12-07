@@ -56,6 +56,21 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
+  // Helper function to format speaker fee with dollar sign
+  const formatFee = (fee: string | undefined): string => {
+    if (!fee || fee === 'TBD' || fee === 'N/A' || fee === '') return fee || 'TBD';
+    const str = String(fee);
+    // If it already starts with $, return as is
+    if (str.startsWith('$')) return str;
+    // If it's a number or numeric string, add $
+    const num = parseFloat(str.replace(/[^0-9.-]/g, ''));
+    if (!isNaN(num)) {
+      // Format with commas for thousands
+      return `$${num.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    }
+    return str;
+  };
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -311,7 +326,7 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
                       </p>
                       <p className="text-sm mt-1">{speaker.topic}</p>
                       <Badge variant="secondary" className="mt-2">
-                        {speaker.fee}
+                        {formatFee(speaker.fee)}
                       </Badge>
                     </div>
                   </CardContent>
