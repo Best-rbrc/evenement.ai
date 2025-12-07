@@ -16,6 +16,7 @@ import datetime
 import asyncio
 import shutil
 import os
+import logging
 from pathlib import Path
 
 # Allow longer agent exchanges (default 10 can be too short for tool-rich agents)
@@ -31,6 +32,24 @@ SKIP_FORM_CREATION = False  # Allows headless runs to bypass form generation
 # Global references to keep MCP servers alive (prevent premature garbage collection)
 _fs_server_ref = None
 _tally_server_ref = None
+
+# Setup file logging
+LOGS_DIR = Path(__file__).parent.parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
+
+def setup_workflow_logger():
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = LOGS_DIR / f"workflow_{timestamp}.log"
+    logger = logging.getLogger(f"workflow_{timestamp}")  # Unique logger per run
+    logger.setLevel(logging.DEBUG)
+    logger.handlers = []  # Clear existing handlers
+    logger.propagate = False  # Don't propagate to root logger
+    fh = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    return logger, log_file
 
 # Canonical JSON schemas - agents MUST return outputs matching these exact structures
 AGENT_SCHEMAS = {
@@ -376,6 +395,14 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     - Calls additional agents if needed
     - Produces final unified plan
     """
+    # Setup logging
+    logger, log_file = setup_workflow_logger()
+    logger.info("="*80)
+    logger.info("Starting Event Planning Workflow")
+    logger.info(f"Event: {event_details.get('event_name', 'Unknown')}")
+    logger.info(f"Log file: {log_file}")
+    logger.info("="*80)
+    
     def update_progress(phase, phase_name, status, agents=None, current_agent=None, message=""):
         """Update progress tracker for real-time frontend updates."""
         if progress_tracker is not None:
@@ -744,12 +771,20 @@ Output structured JSON with your recommendations."""
 
         result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
         
+        # Log raw agent output for debugging
+        print(f"   📄 Raw agent output ({len(result.final_output)} chars): {result.final_output[:300]}...")
+        logger.info(f"Agent '{agent_name}' output length: {len(result.final_output)} chars")
+        logger.debug(f"Agent '{agent_name}' full output: {result.final_output}")
+        
         # Validate and normalize output to match schema
         try:
             validated_output = validate_agent_output(agent_name, result.final_output)
             specialist_outputs[agent_name] = validated_output
+            print(f"   ✅ Output validated successfully")
+            logger.info(f"Agent '{agent_name}' validation: SUCCESS")
         except ValueError as e:
             print(f"⚠️  Schema validation error for {agent_name}: {e}")
+            logger.warning(f"Agent '{agent_name}' validation FAILED: {e}")
             print(f"   Storing raw output anyway for debugging...")
             specialist_outputs[agent_name] = result.final_output
         
@@ -1251,6 +1286,17 @@ Output JSON with:
             else:
                 print(f"  📂 {cf.name} (local file I/O)")
         print("=" * 60 + "\n")
+    
+    # Log final outputs summary
+    logger.info("="*80)
+    logger.info("Final Output Summary:")
+    for key, value in result.items():
+        length = len(str(value)) if value else 0
+        logger.info(f"  {key}: {length} chars")
+        if length > 0:
+            logger.debug(f"  {key} content: {str(value)[:500]}...")
+    logger.info("="*80)
+    logger.info(f"Workflow complete. Log saved to: {log_file}")
     
     return result
 
