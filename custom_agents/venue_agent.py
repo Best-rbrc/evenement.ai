@@ -43,6 +43,14 @@ def create_venue_agent() -> Agent:
         - Key reasoning why it fits
         - Backup alternatives
 
+        **CRITICAL URL REQUIREMENTS:**
+        - The "website" field MUST be a valid, complete URL starting with http:// or https://
+        - DO NOT include partial URLs, relative paths, or plain text descriptions
+        - Examples of VALID formats: "https://www.venue.com", "http://venue.example.org/events"
+        - Examples of INVALID formats: "venue.com", "www.venue.com", "Check venue website", "Olma Messen events site"
+        - If you cannot find a valid URL, use an empty string "" instead of a description or partial URL
+        - Always verify the URL format before including it in the JSON
+
         **Important:** Always perform an actual web search using the `web_search` tool before making recommendations.
         
        Return ONLY valid JSON (no markdown, no commentary, no backticks).
@@ -59,7 +67,7 @@ Do NOT use "+", ranges, or parentheses in numeric fields.
       "estimated_cost": "string",
       "amenities": ["string"],
       "availability_notes": "string",
-      "website": "string",
+      "website": "string (MUST be valid URL with http:// or https://, or empty string if not available)",
       "backup_alternatives": ["string"]
     }
   ],

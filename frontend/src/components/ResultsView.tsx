@@ -71,6 +71,17 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
     return str;
   };
 
+  // Helper function to validate URL before using in href
+  const isValidUrl = (url: string | undefined): boolean => {
+    if (!url) return false;
+    try {
+      const urlObj = new URL(url);
+      return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -230,7 +241,7 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-primary">{venue.priceRange}</span>
-                      {venue.link && (
+                      {venue.link && isValidUrl(venue.link) && (
                         <a
                           href={venue.link}
                           target="_blank"
