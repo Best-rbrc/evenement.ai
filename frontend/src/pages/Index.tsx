@@ -140,13 +140,67 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     link: item.website || item.link || item.url,
   }));
 
-  const budgetBreakdowns = budgetingData.major_category_breakdowns || {};
-  const breakdown = Object.entries(budgetBreakdowns).map(([category, data]: [string, any]) => ({
-    category: category.charAt(0).toUpperCase() + category.slice(1),
-    amount: Number(data?.recommended_spend || data?.amount || 0),
-    percentage: Math.round(Number(data?.pct_of_total || 0)),
-    notes: asArray(data?.key_assumptions).join('; '),
-  }));
+  // Extract budget breakdown - try final_plan.budget.by_category first (from coordinator), 
+  // then fallback to budgeting agent's major_category_breakdowns
+  let budgetBreakdowns: Record<string, any> = {};
+  
+  // First try final_plan.budget.by_category (coordinator's synthesized budget)
+  if (finalPlan?.budget?.by_category && typeof finalPlan.budget.by_category === 'object') {
+    budgetBreakdowns = finalPlan.budget.by_category;
+  }
+  // Fallback to budgeting agent's breakdown
+  else if (budgetingData.major_category_breakdowns && typeof budgetingData.major_category_breakdowns === 'object') {
+    budgetBreakdowns = budgetingData.major_category_breakdowns;
+  }
+  
+  // Calculate total for percentages
+  const breakdownTotal = Object.values(budgetBreakdowns).reduce((sum: number, value: any) => {
+    if (typeof value === 'number') return sum + value;
+    if (typeof value === 'string') {
+      const num = parseFloat(value.replace(/[^0-9.]/g, ''));
+      return sum + (isNaN(num) ? 0 : num);
+    }
+    if (value && typeof value === 'object' && typeof value.recommended_spend === 'number') {
+      return sum + value.recommended_spend;
+    }
+    return sum;
+  }, 0);
+  
+  const breakdown = Object.entries(budgetBreakdowns).map(([category, data]: [string, any]) => {
+    // Extract amount - handle different formats
+    let amount = 0;
+    if (typeof data === 'number') {
+      amount = data;
+    } else if (typeof data === 'string') {
+      // Handle currency strings like "$90,000" or "90000"
+      const num = parseFloat(data.replace(/[^0-9.]/g, ''));
+      amount = isNaN(num) ? 0 : num;
+    } else if (data && typeof data === 'object') {
+      // Handle object format from budgeting agent: {recommended_spend: 90000, pct_of_total: 51.4}
+      amount = Number(data.recommended_spend || data.amount || data || 0);
+    }
+    
+    // Calculate percentage
+    const percentage = breakdownTotal > 0 ? Math.round((amount / breakdownTotal) * 100) : 0;
+    
+    return {
+      category: category.charAt(0).toUpperCase() + category.slice(1),
+      amount,
+      percentage,
+      notes: asArray(data?.key_assumptions || []).join('; '),
+    };
+  }).filter(item => item.amount > 0); // Only include categories with amounts > 0
+  
+  // Debug logging
+  if (breakdown.length === 0) {
+    console.warn('No budget breakdown found. Available data:', {
+      finalPlanBudget: finalPlan?.budget,
+      budgetingDataMajorBreakdowns: budgetingData.major_category_breakdowns,
+      budgetBreakdownsKeys: Object.keys(budgetBreakdowns),
+    });
+  } else {
+    console.log(`✅ Found ${breakdown.length} budget categories:`, breakdown.map(b => b.category).join(', '));
+  }
 
   const budgetTotal = Number(finalPlan?.budget?.total_allocated) || breakdown.reduce((sum, entry) => sum + entry.amount, 0);
   const scenarios = asArray(budgetingData.what_if_scenarios)
@@ -190,18 +244,110 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     }
   }
 
-  const schedule = scheduleSessions.map((item: any) => {
-    const timeWindow = [item.start_time, item.end_time].filter(Boolean).join(' - ');
+  // Extract event date for multi-day events
+  const eventDate = eventDetails.date;
+  const eventDates = eventDate?.includes(' to ') 
+    ? eventDate.split(' to ').map(d => d.trim())
+    : eventDate ? [eventDate] : [];
+  
+  // First pass: map sessions and extract date/day information
+  const scheduleWithDates = scheduleSessions.map((item: any, index: number) => {
+    const startTime = item.start_time || '';
+    const endTime = item.end_time || '';
+    const timeWindow = [startTime, endTime].filter(Boolean).join(' - ');
     const duration = item.duration ? `${item.duration} min` : item.duration_minutes ? `${item.duration_minutes} min` : '';
+    
+    // Extract date/day information - check multiple sources
+    let date: string | undefined;
+    const title = (item.name || item.session_name || item.title || '').toLowerCase();
+    
+    // Check if date is explicitly provided
+    if (item.date) {
+      date = item.date;
+    } else if (item.day) {
+      date = item.day;
+    } 
+    // Check if title contains day information (e.g., "Day 1", "Day 2")
+    else if (title.includes('day 1') || title.includes('(day 1)')) {
+      date = eventDates[0] || 'Day 1';
+    } else if (title.includes('day 2') || title.includes('(day 2)')) {
+      date = eventDates[1] || eventDates[0] || 'Day 2';
+    } else if (title.includes('day 3') || title.includes('(day 3)')) {
+      date = eventDates[2] || eventDates[1] || eventDates[0] || 'Day 3';
+    }
+    // For single-day events, assign the date
+    else if (eventDates.length === 1) {
+      date = eventDates[0];
+    }
+    
+    // Determine type based on title/keywords
+    let itemType: ScheduleItem['type'] = 'session';
+    if (title.includes('keynote') || title.includes('opening') || title.includes('closing')) {
+      itemType = 'keynote';
+    } else if (title.includes('break') || title.includes('coffee') || title.includes('networking')) {
+      itemType = 'break';
+    } else if (title.includes('lunch') || title.includes('dinner') || title.includes('meal')) {
+      itemType = 'meal';
+    } else if (title.includes('networking')) {
+      itemType = 'networking';
+    } else if (title.includes('demo') || title.includes('workshop') || title.includes('activity')) {
+      itemType = 'activity';
+    }
+    
     return {
       time: timeWindow || item.time || 'TBD',
       title: item.name || item.session_name || item.title || item.activity || 'Session',
       duration: duration,
-      type: (item.type || 'session') as ScheduleItem['type'],
+      type: itemType,
       location: item.room || item.location,
       speaker: item.speaker || item.presenter,
+      date: date,
+      startTime: startTime, // For sorting
+      endTime: endTime, // For sorting
+      originalIndex: index, // Preserve original order for day detection
     };
   });
+  
+  // For multi-day events without explicit dates, detect day boundaries
+  // by looking for time resets (e.g., 09:00 appearing after later times)
+  if (eventDates.length > 1 && scheduleWithDates.some(item => !item.date)) {
+    let currentDay = 0;
+    let lastTime = '';
+    
+    scheduleWithDates.forEach((item, index) => {
+      if (!item.date && item.startTime) {
+        // If we see an earlier time after a later time, it's likely a new day
+        if (lastTime && item.startTime < lastTime && item.startTime <= '12:00') {
+          currentDay = Math.min(currentDay + 1, eventDates.length - 1);
+        }
+        lastTime = item.startTime;
+        
+        // Assign date based on detected day
+        if (currentDay < eventDates.length) {
+          item.date = eventDates[currentDay];
+        }
+      }
+    });
+  }
+  
+  // Sort schedule by date (if available) and then by start time
+  const schedule = scheduleWithDates.sort((a, b) => {
+    // First sort by date
+    if (a.date && b.date) {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+    } else if (a.date) return -1;
+    else if (b.date) return 1;
+    
+    // Then sort by start time
+    if (a.startTime && b.startTime) {
+      return a.startTime.localeCompare(b.startTime);
+    } else if (a.startTime) return -1;
+    else if (b.startTime) return 1;
+    
+    // Fallback to original order
+    return (a.originalIndex || 0) - (b.originalIndex || 0);
+  }).map(({ originalIndex, ...item }) => item); // Remove originalIndex from final output
 
   // Debug logging
   if (schedule.length === 0) {

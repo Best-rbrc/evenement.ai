@@ -55,6 +55,9 @@ export interface ScheduleItem {
   type: 'keynote' | 'session' | 'break' | 'networking' | 'meal' | 'activity';
   location?: string;
   speaker?: string;
+  date?: string; // Date or day (e.g., "2026-06-15" or "Day 1")
+  startTime?: string; // For sorting (HH:MM format)
+  endTime?: string; // For sorting (HH:MM format)
 }
 
 export interface Speaker {
