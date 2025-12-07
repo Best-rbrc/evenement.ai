@@ -770,7 +770,7 @@ const Index = () => {
                 <Sparkles className="w-5 h-5 text-primary-foreground" />
               </div>
               <span className="text-xl font-display font-bold text-foreground">
-                EventAI
+                Évènement.ai
               </span>
             </button>
             <StepIndicator currentState={appState} />
@@ -822,7 +822,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="py-6 border-t border-border/50">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          Powered by AI Agents • Built with love
+          Powered by 13 agents and 1 coordinator • Built with love
         </div>
       </footer>
 

@@ -243,7 +243,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
   }));
 
   const features = [
-    { icon: Brain, title: "11 AI Agents", description: "Specialized agents for every aspect of event planning" },
+    { icon: Brain, title: "13 Agents & 1 Coordinator", description: "Specialized agents for every aspect of event planning" },
     { icon: Zap, title: "Real-time Processing", description: "Watch your event plan come together live" },
     { icon: Calendar, title: "Complete Plans", description: "From venue to catering to entertainment" },
     { icon: Users, title: "Guest Management", description: "Handle events from 10 to 10,000 attendees" },
@@ -296,7 +296,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
               <Sparkles className="w-6 h-6 text-primary-foreground" />
             </motion.div>
             <span className="text-2xl font-display font-bold text-foreground">
-              EventAI
+              Évènement.ai
             </span>
           </motion.div>
           
@@ -327,7 +327,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
               >
                 <Sparkles className="w-4 h-4 text-soft-coral" />
               </motion.div>
-              <span className="text-sm font-medium">Powered by 11 AI Agents</span>
+              <span className="text-sm font-medium">Powered by 13 agents and 1 coordinator</span>
             </motion.div>
 
             {/* Main heading */}
@@ -462,7 +462,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
               viewport={{ once: true }}
             >
               <h2 className="text-4xl md:text-5xl font-display font-bold mb-4">
-                Why Choose <GlowText className="text-soft-coral">EventAI</GlowText>?
+                Why Choose <GlowText className="text-soft-coral">Évènement.ai</GlowText>?
               </h2>
               <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
                 Our multi-agent system handles every aspect of event planning with precision and creativity.
@@ -536,7 +536,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
         {/* Footer */}
         <footer className="py-8 px-4 border-t border-border/50">
           <div className="max-w-6xl mx-auto text-center text-muted-foreground">
-            <p>© 2024 EventAI. Powered by 11 AI Agents • Built with love</p>
+            <p>© 2024 Évènement.ai. Powered by 13 agents and 1 coordinator • Built with love</p>
           </div>
         </footer>
       </div>
