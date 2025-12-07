@@ -263,12 +263,48 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     keyMessages: asArray(commRecommendations.key_messages || []),
   };
 
-  const timelineItems = asArray(finalPlan?.timeline || []).map((item: any) => {
-    if (!item) return 'Timeline item';
-    const tasks = asArray(item.tasks || []).join(', ');
-    const deadline = item.deadline ? ` (by ${item.deadline})` : '';
-    return `${item.phase || 'Phase'}: ${tasks}${deadline}`.trim();
-  });
+  // Extract timeline from finalPlan.timeline (expected format: array of objects with phase, tasks, deadline)
+  // The backend schema ensures timeline is always present (even if empty array)
+  const timelineData = finalPlan?.timeline;
+  let timelineItems: string[] = [];
+  
+  if (timelineData) {
+    if (Array.isArray(timelineData)) {
+      // Handle array of timeline items (objects or strings)
+      timelineItems = timelineData.map((item: any) => {
+        if (!item) return null;
+        // Handle string items
+        if (typeof item === 'string') {
+          return item;
+        }
+        // Handle object items (expected format: {phase, tasks, deadline})
+        if (typeof item === 'object') {
+          const tasks = asArray(item.tasks || []).join(', ');
+          const deadline = item.deadline ? ` (by ${item.deadline})` : '';
+          const phase = item.phase || 'Phase';
+          const result = `${phase}: ${tasks}${deadline}`.trim();
+          return result || null;
+        }
+        return String(item);
+      }).filter((item): item is string => Boolean(item));
+    } else if (typeof timelineData === 'string') {
+      // Handle string timeline (comma-separated or newline-separated)
+      timelineItems = timelineData.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+    }
+  }
+  
+  // Debug logging
+  if (timelineItems.length === 0) {
+    console.warn('Timeline is empty. Available data:', {
+      finalPlanTimeline: finalPlan?.timeline,
+      timelineDataType: timelineData ? typeof timelineData : 'undefined',
+      timelineDataIsArray: Array.isArray(timelineData),
+      finalPlanKeys: finalPlan ? Object.keys(finalPlan) : [],
+      finalPlanPreview: finalPlan ? JSON.stringify(finalPlan).substring(0, 500) : 'No finalPlan',
+    });
+  } else {
+    console.log(`✅ Found ${timelineItems.length} timeline items:`, timelineItems);
+  }
 
   const risks = asArray(finalPlan?.risks || schedulingData?.conflicts_explained || []).map((item: any) => ({
     risk: item.risk || item.conflict || String(item),
