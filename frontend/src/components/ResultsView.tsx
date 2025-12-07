@@ -101,7 +101,22 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
           <CardContent className="p-0">
             <div className="grid grid-cols-1 lg:grid-cols-2">
               {/* Event Info */}
-              <div className="p-8">
+              <div className="p-8 relative">
+                {/* Logo in top-right corner */}
+                {result.exports?.logoFile && result.exports.logoFile !== 'Error' && (() => {
+                  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+                  const filePath = result.exports.logoFile.replace(/^event_outputs[\/\\]/, '');
+                  const logoUrl = `${API_BASE_URL}/api/files/${encodeURIComponent(filePath)}`;
+                  return (
+                    <div className="absolute top-4 right-4 z-10">
+                      <img 
+                        src={logoUrl} 
+                        alt="Event Logo" 
+                        className="h-16 w-16 object-contain rounded-lg bg-background/50 p-1 shadow-sm"
+                      />
+                    </div>
+                  );
+                })()}
                 <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
                   {result.eventDetails.type}
                 </Badge>
