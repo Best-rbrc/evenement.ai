@@ -18,7 +18,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
-from openai import OpenAI
 
 from workflows.event_planning_workflow import run_event_planning
 
@@ -44,9 +43,6 @@ server_logger = setup_server_logger()
 # Load environment variables (e.g., OPENAI_API_KEY)
 load_dotenv()
 
-# Initialize OpenAI client
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 app = FastAPI(title="AI Event Planner API", version="0.1.0")
 
 # Allow local dev frontend by default; can be narrowed via env var
@@ -70,11 +66,6 @@ _current_progress: dict = {
     "current_agent": None,
     "message": ""
 }
-
-
-class VoiceInput(BaseModel):
-    """Payload for voice dictation input."""
-    transcript: str = Field(..., description="The transcribed speech from the user")
 
 
 class EventRequest(BaseModel):
@@ -192,60 +183,6 @@ async def get_file(file_path: str):
         filename=full_path.name,
         media_type='application/octet-stream'
     )
-
-
-@app.post("/api/voice-to-form")
-async def voice_to_form(payload: VoiceInput) -> dict:
-    """Parse voice transcript and extract event details using OpenAI."""
-    try:
-        system_prompt = """You are an AI assistant that extracts event planning details from natural speech transcripts.
-
-Extract ONLY the information explicitly mentioned by the user. Do not infer or make up any details.
-If a field is not mentioned, set it to null.
-
-Return a JSON object with these fields:
-- eventType: string (one of: "Tech Conference", "Workshop", "Hackathon", "Corporate Gala", "Wedding", "Academic Symposium", "Festival", "Other")
-- customEventType: string or null (only if eventType is "Other")
-- eventName: string or null (preserve exact capitalization - e.g., "START Hack" not "Star Tech")
-- dateType: "single" or "range" (use "range" if multiple days mentioned, "single" for one day)
-- eventDate: string in YYYY-MM-DD format or null
-- endDate: string in YYYY-MM-DD format or null (only if multiple days mentioned)
-- startTime: string in HH:MM 24-hour format or null
-- endTime: string in HH:MM 24-hour format or null
-- locationPreference: string or null (format as "City, Country" e.g., "St. Gallen, Switzerland" - use proper city names)
-- budgetMin: number or null (in USD)
-- budgetMax: number or null (in USD)
-- guestCountMin: number or null
-- guestCountMax: number or null
-- specialRequirements: string or null (any other details mentioned)
-
-IMPORTANT RULES:
-1. For dates: If user says "March 23-26" or mentions multiple days, infer year as 2026 and set dateType to "range"
-2. For budget: Extract numbers ("150 to 300 grand" = budgetMin: 150000, budgetMax: 300000)
-3. For locations: Correct common speech recognition errors ("sent Allen" = "St. Gallen", "Allen" = "St. Gallen")
-4. For event names: Preserve capitalization patterns ("Star Tech" likely means "START Hack" for hackathons)
-5. For times: Convert to 24-hour format ("4 PM" = "16:00", "5 PM" = "17:00")
-6. For guest count: Look for attendee numbers ("500 to 600 hackers" = guestCountMin: 500, guestCountMax: 600)
-7. Common location corrections: "sent Allen" or "sent galen" or "Allen" in Switzerland context = "St. Gallen, Switzerland"
-8. Common event name corrections for hackathons: "Star Tech" = "START Hack", "start hack" = "START Hack"""
-
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Extract event details from: {payload.transcript}"}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.1
-        )
-        
-        result = json.loads(response.choices[0].message.content)
-        server_logger.info(f"Voice dictation parsed: {result}")
-        return result
-        
-    except Exception as exc:
-        server_logger.error(f"Voice dictation error: {exc}")
-        raise HTTPException(status_code=500, detail=f"Failed to process voice input: {str(exc)}")
 
 
 @app.post("/api/plan", response_model=PlanResponse)
