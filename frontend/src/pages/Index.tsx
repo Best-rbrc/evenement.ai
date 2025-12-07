@@ -14,6 +14,22 @@ import { useToast } from '@/hooks/use-toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+// Map backend agent names to frontend agent definitions
+const agentDefinitions: Record<string, { name: string; icon: string }> = {
+  venue: { name: 'Venue Agent', icon: 'Building2' },
+  budgeting: { name: 'Budgeting Agent', icon: 'DollarSign' },
+  budget: { name: 'Budgeting Agent', icon: 'DollarSign' },
+  programme: { name: 'Programme Agent', icon: 'Calendar' },
+  speakers: { name: 'Speakers Agent', icon: 'Mic' },
+  catering: { name: 'Catering Agent', icon: 'UtensilsCrossed' },
+  activities: { name: 'Activities Agent', icon: 'Sparkles' },
+  entertainment: { name: 'Entertainment Agent', icon: 'Music' },
+  scheduling: { name: 'Scheduling Agent', icon: 'Clock' },
+  communication: { name: 'Communication Agent', icon: 'MessageSquare' },
+  calendar: { name: 'Calendar Agent', icon: 'CalendarCheck' },
+  form: { name: 'Form Agent', icon: 'Sparkles' },
+};
+
 type JsonRecord = Record<string, any>;
 
 const safeParse = <T,>(value: unknown): T | null => {
@@ -282,23 +298,48 @@ const Index = () => {
   useEffect(() => {
     if (appState !== 'processing') return;
 
-    const interval = setInterval(() => {
-      setAgents((prev) =>
-        prev.map((agent, index) => {
-          const messages = agentMessages[agent.id] || ['Working...'];
-          const message = messages[(Date.now() / 700 + index) % messages.length | 0];
-          const progress = agent.status === 'completed' ? 100 : 50 + ((index % 3) * 10);
-          return {
-            ...agent,
-            status: 'active',
-            message,
-            progress,
-          };
-        })
-      );
-    }, 700);
+    // Poll for progress updates every 500ms
+    const progressInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/plan/status`);
+        if (response.ok) {
+          const progress = await response.json();
+          
+          console.log('Progress update:', progress);
+          
+          // If phase_2 is active and we have agents, populate them
+          if (progress.phase === 'phase_2' && progress.agents && progress.agents.length > 0) {
+            const backendStatuses = progress.agents as Array<{ name: string; status: string }>;
+            
+            const usedAgents: Agent[] = backendStatuses.map((bs) => {
+              const agentDef = agentDefinitions[bs.name] || { name: bs.name, icon: 'Sparkles' };
+              
+              let frontendStatus: 'pending' | 'active' | 'completed' = 'pending';
+              if (bs.status === 'done') {
+                frontendStatus = 'completed';
+              } else if (bs.status === 'working') {
+                frontendStatus = 'active';
+              }
+              
+              return {
+                id: bs.name,
+                name: agentDef.name,
+                icon: agentDef.icon,
+                status: frontendStatus,
+                message: frontendStatus === 'completed' ? 'Completed' : 'Working...',
+                progress: frontendStatus === 'completed' ? 100 : 60,
+              };
+            });
+            
+            setAgents(usedAgents);
+          }
+        }
+      } catch (error) {
+        console.log('Progress poll error (expected during startup):', error);
+      }
+    }, 500);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(progressInterval);
   }, [appState]);
 
   const planMutation = useMutation<PlanApiResponse, Error, EventFormData>({
@@ -374,7 +415,8 @@ const Index = () => {
   const handleFormSubmit = (data: EventFormData) => {
     setFormData(data);
     setEventResult(null);
-    setAgents(initialAgents.map((a) => ({ ...a, status: 'pending', message: 'Waiting to start...', progress: 0 })));
+    // Start with empty agents - the orchestrator phase will show
+    setAgents([]);
     setAppState('processing');
 
     // Merge dev settings into form data
@@ -384,7 +426,46 @@ const Index = () => {
       onSuccess: (apiResponse) => {
         const mapped = mapWorkflowToEventResult(apiResponse, data);
         setEventResult(mapped);
-        setAgents((prev) => prev.map((agent) => ({ ...agent, status: 'completed', message: 'Completed', progress: 100 })));
+        
+        // Log the response for debugging
+        console.log('API Response:', apiResponse);
+        console.log('Agent statuses:', apiResponse.result?.agent_statuses);
+        
+        // Map backend agent_statuses to frontend agents
+        if (apiResponse.result?.agent_statuses && Array.isArray(apiResponse.result.agent_statuses)) {
+          const backendStatuses = apiResponse.result.agent_statuses as Array<{ name: string; status: string }>;
+          console.log('Processing agent statuses:', backendStatuses);
+          
+          // Create frontend agents only for the ones actually used by the orchestrator
+          const usedAgents: Agent[] = backendStatuses.map((bs) => {
+            const agentDef = agentDefinitions[bs.name] || { name: bs.name, icon: 'Sparkles' };
+            
+            // Map backend statuses to frontend statuses
+            let frontendStatus: 'pending' | 'active' | 'completed' = 'pending';
+            if (bs.status === 'done') {
+              frontendStatus = 'completed';
+            } else if (bs.status === 'working') {
+              frontendStatus = 'active';
+            }
+            
+            return {
+              id: bs.name,
+              name: agentDef.name,
+              icon: agentDef.icon,
+              status: frontendStatus,
+              message: frontendStatus === 'completed' ? 'Completed' : 'In progress',
+              progress: frontendStatus === 'completed' ? 100 : 50,
+            };
+          });
+          
+          console.log('Setting agents:', usedAgents);
+          setAgents(usedAgents);
+        } else {
+          console.log('No agent_statuses found in response, using all as completed');
+          // Fallback if agent_statuses not available
+          setAgents((prev) => prev.map((agent) => ({ ...agent, status: 'completed', message: 'Completed', progress: 100 })));
+        }
+        
         setAppState('results');
       },
       onError: (error) => {
@@ -394,7 +475,7 @@ const Index = () => {
           description: error.message || 'Unexpected error while running the agents.',
           variant: 'destructive',
         });
-        setAgents(initialAgents.map((a) => ({ ...a, status: 'pending', message: 'Waiting to start...', progress: 0 })));
+        setAgents([]);
         setAppState('form');
       },
     });
