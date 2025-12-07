@@ -1,4 +1,3 @@
-import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -21,10 +20,7 @@ import {
   Sparkles, 
   Clock,
   Building2,
-  PartyPopper,
-  Mic,
-  MicOff,
-  Loader2
+  PartyPopper
 } from 'lucide-react';
 
 const eventTypes = [
@@ -60,11 +56,6 @@ interface EventFormProps {
 }
 
 export function EventForm({ onSubmit }: EventFormProps) {
-  const [isListening, setIsListening] = React.useState(false);
-  const [isProcessing, setIsProcessing] = React.useState(false);
-  const transcriptRef = React.useRef('');
-  const recognitionRef = React.useRef<any>(null);
-
   const {
     register,
     handleSubmit,
@@ -122,95 +113,6 @@ export function EventForm({ onSubmit }: EventFormProps) {
     }).format(value);
   };
 
-  const startVoiceInput = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition is not supported in your browser. Please use Chrome or Edge.');
-      return;
-    }
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      transcriptRef.current = '';
-    };
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript + ' ';
-        }
-      }
-      if (finalTranscript) {
-        transcriptRef.current += finalTranscript;
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-  };
-
-  const stopVoiceInput = async () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-
-      const transcript = transcriptRef.current.trim();
-      if (transcript) {
-        setIsProcessing(true);
-        try {
-          const response = await fetch('http://localhost:8000/api/voice-to-form', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transcript })
-          });
-
-          if (!response.ok) throw new Error('Failed to process voice input');
-
-          const data = await response.json();
-          
-          // Auto-fill form with extracted data (only non-null values)
-          if (data.eventType) setValue('eventType', data.eventType, { shouldValidate: true });
-          if (data.customEventType) setValue('customEventType', data.customEventType, { shouldValidate: true });
-          if (data.eventName) setValue('eventName', data.eventName, { shouldValidate: true });
-          if (data.dateType) setValue('dateType', data.dateType, { shouldValidate: true });
-          if (data.eventDate) setValue('eventDate', data.eventDate, { shouldValidate: true });
-          if (data.endDate) setValue('endDate', data.endDate, { shouldValidate: true });
-          if (data.startTime) setValue('startTime', data.startTime, { shouldValidate: true });
-          if (data.endTime) setValue('endTime', data.endTime, { shouldValidate: true });
-          if (data.locationPreference) setValue('locationPreference', data.locationPreference, { shouldValidate: true });
-          if (data.budgetMin !== null && data.budgetMin !== undefined) setValue('budgetMin', data.budgetMin, { shouldValidate: true });
-          if (data.budgetMax !== null && data.budgetMax !== undefined) setValue('budgetMax', data.budgetMax, { shouldValidate: true });
-          if (data.guestCountMin !== null && data.guestCountMin !== undefined) setValue('guestCountMin', data.guestCountMin, { shouldValidate: true });
-          if (data.guestCountMax !== null && data.guestCountMax !== undefined) setValue('guestCountMax', data.guestCountMax, { shouldValidate: true });
-          if (data.specialRequirements) setValue('specialRequirements', data.specialRequirements, { shouldValidate: true });
-
-          transcriptRef.current = '';
-        } catch (error) {
-          console.error('Error processing voice input:', error);
-          alert('Failed to process voice input. Please try again.');
-        } finally {
-          setIsProcessing(false);
-        }
-      }
-    }
-  };
-
   return (
     <motion.div
       variants={containerVariants}
@@ -225,47 +127,6 @@ export function EventForm({ onSubmit }: EventFormProps) {
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
           Tell us about your event and our AI agents will create a comprehensive plan tailored to your needs.
         </p>
-        
-        {/* Voice Input Button */}
-        <div className="mt-6 flex flex-col items-center gap-3">
-          <Button
-            type="button"
-            onClick={isListening ? stopVoiceInput : startVoiceInput}
-            disabled={isProcessing}
-            variant={isListening ? "destructive" : "outline"}
-            size="lg"
-            className="min-w-[200px]"
-          >
-            {isProcessing ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Processing...
-              </>
-            ) : isListening ? (
-              <>
-                <MicOff className="w-5 h-5" />
-                Stop Recording
-              </>
-            ) : (
-              <>
-                <Mic className="w-5 h-5" />
-                Describe Your Event
-              </>
-            )}
-          </Button>
-          {isListening && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="px-4 py-2 bg-primary/10 rounded-full border border-primary/20"
-            >
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                Listening...
-              </p>
-            </motion.div>
-          )}
-        </div>
       </motion.div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
