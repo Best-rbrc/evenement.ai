@@ -83,13 +83,14 @@ Final plan structure:
   "executive_summary": "2-3 paragraph overview",
   "timeline": [{{"phase": "Phase name (e.g., 'Pre-Event Planning', 'Event Execution', 'Post-Event')", "tasks": ["Task 1", "Task 2", ...], "deadline": "YYYY-MM-DD"}}],
   "schedule": {{
-    "optimized": true/false,
-    "sessions": [...],  // Include if Scheduling Agent was used
-    "metrics": {{
+    "optimized": true/false,  // true if scheduling agent was used, false otherwise
+    "sessions": [...],  // REQUIRED - ALWAYS include at least one session. For multi-day events, include "date": "YYYY-MM-DD" for each session
+    "metrics": {{  // Optional if scheduling agent was not used
       "total_duration": "...",
       "room_utilization": {{}},
       "conflicts_resolved": "..."
-    }}
+    }},
+    "status": "optimal | feasible | infeasible | basic"  // "basic" if created from event details
   }},
   "budget": {{
     "total_available": "...",

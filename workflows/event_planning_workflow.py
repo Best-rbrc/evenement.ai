@@ -377,6 +377,63 @@ def copy_sandbox_files_to_project():
         print(f"✅ Copied {copied_count} file(s) from sandbox to {PROJECT_OUTPUT_DIR}")
 
 
+def _create_basic_schedule(event_details: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a basic schedule from event details when no schedule is provided by agents."""
+    event_name = event_details.get('event_name', 'Event')
+    event_date = event_details.get('event_date', '')
+    time_window = event_details.get('time_window', '09:00 - 17:00')
+    guest_count = event_details.get('guest_count', 'TBD')
+    
+    # Parse time window
+    start_time = '09:00'
+    end_time = '17:00'
+    if ' - ' in time_window:
+        times = time_window.split(' - ')
+        if len(times) == 2:
+            start_time = times[0].strip()
+            end_time = times[1].strip()
+    
+    # Parse event dates for multi-day events
+    event_dates = []
+    if event_date:
+        if ' to ' in event_date:
+            event_dates = [d.strip() for d in event_date.split(' to ')]
+        else:
+            event_dates = [event_date]
+    
+    # Create basic sessions
+    sessions = []
+    
+    # For single-day events, create one main session
+    if len(event_dates) <= 1:
+        date = event_dates[0] if event_dates else event_date
+        sessions.append({
+            "session_id": 1,
+            "name": event_name,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": 480,  # 8 hours default
+            "date": date if date else None
+        })
+    else:
+        # For multi-day events, create one session per day
+        for idx, date in enumerate(event_dates):
+            sessions.append({
+                "session_id": idx + 1,
+                "name": f"{event_name} - Day {idx + 1}",
+                "start_time": start_time,
+                "end_time": end_time,
+                "duration": 480,
+                "date": date
+            })
+    
+    return {
+        "optimized": False,
+        "sessions": sessions,
+        "status": "basic"
+    }
+
+
 def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str, Any] = None) -> Dict[str, Any]:
     """Intelligent multi-phase workflow with coordinator orchestration.
 
@@ -839,6 +896,7 @@ Your task for PHASE 3 - FINALIZATION:
 2.5. SCHEDULING OPTIMIZATION REVIEW (IF SCHEDULING AGENT WAS USED):
    - Extract and preserve scheduling metrics (total_duration, room_utilization, conflicts_resolved)
    - Include optimized schedule in final plan under "schedule" section
+   - For multi-day events: Add "date": "YYYY-MM-DD" to each session based on event_date range
    - Highlight any scheduling conflicts that were resolved
    - If scheduling was infeasible, document the conflicts and suggestions
 
@@ -853,6 +911,12 @@ Your task for PHASE 3 - FINALIZATION:
 3. SYNTHESIZE the final comprehensive event plan including:
    - Executive summary (2-3 paragraphs)
    - Complete event timeline (with all areas integrated)
+   - **EVENT SCHEDULE (MANDATORY)**: ALWAYS include a schedule section with sessions/timeline
+     * If scheduling agent was used: Use their optimized schedule
+     * If programme agent provided schedule: Use their daily_schedule or session_and_flow
+     * If neither exists: Create a basic schedule based on event details (start time, duration, breaks)
+     * For multi-day events: Include date for each session
+     * Minimum: At least one session with start_time, end_time, and name
    - Detailed budget breakdown by category with totals
    - All specialist recommendations (organized and refined)
    - Risk assessment with mitigation strategies
@@ -866,15 +930,26 @@ Your task for PHASE 3 - FINALIZATION:
     {{"phase": "Phase name (e.g., 'Pre-Event Planning', 'Event Execution', 'Post-Event')", "tasks": ["Task 1", "Task 2", ...], "deadline": "YYYY-MM-DD"}}
   ],
   "schedule": {{
-    "optimized": true/false,
-    "sessions": [...],  // REQUIRED if scheduling agent was used
-    "metrics": {{
+    "optimized": true/false,  // true if scheduling agent was used, false otherwise
+    "sessions": [  // REQUIRED - ALWAYS include at least one session. For multi-day events, include "date": "YYYY-MM-DD" for each session
+      {{
+        "session_id": 1,
+        "name": "string",  // e.g., "Welcome & Opening", "Main Event", "Closing"
+        "start_time": "HH:MM",  // REQUIRED
+        "end_time": "HH:MM",  // REQUIRED
+        "duration": number,  // in minutes
+        "room": "string",  // optional
+        "speaker": "string",  // optional
+        "date": "YYYY-MM-DD"  // REQUIRED for multi-day events
+      }}
+    ],
+    "metrics": {{  // Optional if scheduling agent was not used
       "total_duration": "...",
       "event_ends_at": "...",
       "room_utilization": {{}},
       "conflicts_resolved": "..."
     }},
-    "status": "optimal | feasible | infeasible"  // from scheduling agent output
+    "status": "optimal | feasible | infeasible | basic"  // "basic" if created from event details without optimization
   }},
   "budget": {{
     "total_available": "...",
@@ -1260,7 +1335,10 @@ Output JSON with:
                     if key == "timeline":
                         parsed[key] = []
                     elif key == "schedule":
-                        parsed[key] = {"optimized": False, "sessions": []}
+                        # Create a basic schedule from event details if none exists
+                        basic_schedule = _create_basic_schedule(event_details)
+                        parsed[key] = basic_schedule
+                        print(f"   Created basic schedule with {len(basic_schedule.get('sessions', []))} sessions")
                     elif key == "budget":
                         parsed[key] = {"total_available": 0, "total_allocated": 0, "by_category": {}, "status": "unknown"}
                     elif key == "recommendations":
@@ -1273,6 +1351,19 @@ Output JSON with:
                         parsed[key] = []
                     else:
                         parsed[key] = ""
+            
+            # Ensure schedule always has at least one session
+            if "schedule" in parsed:
+                schedule = parsed["schedule"]
+                if not isinstance(schedule, dict):
+                    schedule = {"optimized": False, "sessions": []}
+                    parsed["schedule"] = schedule
+                
+                if "sessions" not in schedule or not schedule.get("sessions"):
+                    # Create basic schedule if sessions are missing or empty
+                    basic_schedule = _create_basic_schedule(event_details)
+                    parsed["schedule"] = basic_schedule
+                    print(f"   Schedule was empty, created basic schedule with {len(basic_schedule.get('sessions', []))} sessions")
             
             final_plan_dict = parsed
         
