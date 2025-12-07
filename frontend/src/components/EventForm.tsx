@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { EventFormData } from '@/types/event';
+import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { 
   Calendar, 
   MapPin, 
@@ -266,20 +267,20 @@ export function EventForm({ onSubmit }: EventFormProps) {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="locationPreference">Preferred Location</Label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      {...register('locationPreference')}
-                      className="pl-10"
-                      placeholder="e.g., San Francisco, CA"
-                    />
-                  </div>
+                  <LocationAutocomplete
+                    value={watch('locationPreference')}
+                    onChange={(value, coords) => {
+                      setValue('locationPreference', value, { shouldValidate: true });
+                      if (coords) {
+                        setValue('locationCoords', coords);
+                      }
+                    }}
+                    placeholder="e.g., San Francisco, CA or Barcelona, Spain"
+                    icon={<Building2 className="w-4 h-4 text-muted-foreground" />}
+                  />
                   {errors.locationPreference && (
                     <p className="text-sm text-destructive">{errors.locationPreference.message}</p>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    Enter a city, region, or specific venue preference
-                  </p>
                 </div>
               </CardContent>
             </Card>
