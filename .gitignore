@@ -23,5 +23,8 @@ dist/
 # Event outputs
 event_outputs/
 
+# Logs
+logs/
+
 # Package build cache
 .uv/

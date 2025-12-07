@@ -8,6 +8,9 @@ from __future__ import annotations
 import asyncio
 import os
 import json
+import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -17,6 +20,25 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from workflows.event_planning_workflow import run_event_planning
+
+# Setup server logging
+LOGS_DIR = Path(__file__).parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
+
+def setup_server_logger():
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = LOGS_DIR / f"server_{timestamp}.log"
+    logger = logging.getLogger("server")
+    logger.setLevel(logging.DEBUG)
+    logger.handlers = []
+    fh = logging.FileHandler(log_file)
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    return logger
+
+server_logger = setup_server_logger()
 
 # Load environment variables (e.g., OPENAI_API_KEY)
 load_dotenv()
@@ -169,6 +191,34 @@ async def create_plan(payload: EventRequest) -> PlanResponse:
         raise HTTPException(status_code=500, detail=str(exc))
 
     response = PlanResponse(status="ok", event_details=event_details, result=result)
+    
+    # Log what's being sent to frontend
+    print(f"\n📤 SERVER: Sending response to frontend:")
+    print(f"   📊 event_schedule: {len(result.get('event_schedule', ''))} chars")
+    print(f"   🎭 entertainment: {len(result.get('entertainment', ''))} chars")
+    print(f"   📄 event_schedule preview: {result.get('event_schedule', '')[:200]}...")
+    print(f"   🎭 entertainment preview: {result.get('entertainment', '')[:200]}...")
+    
+    server_logger.info("="*80)
+    server_logger.info("Response sent to frontend:")
+    for key, value in result.items():
+        length = len(str(value)) if value else 0
+        server_logger.info(f"  {key}: {length} chars")
+        if length > 0 and length < 1000:
+            server_logger.debug(f"  {key} full content: {value}")
+        elif length > 0:
+            server_logger.debug(f"  {key} preview: {str(value)[:500]}...")
+    
+    server_logger.info("="*80)
+    server_logger.info("Response sent to frontend:")
+    for key, value in result.items():
+        length = len(str(value)) if value else 0
+        server_logger.info(f"  {key}: {length} chars")
+        if length > 0 and length < 1000:
+            server_logger.debug(f"  {key} full content: {value}")
+        elif length > 0:
+            server_logger.debug(f"  {key} preview: {str(value)[:500]}...")
+    server_logger.info("="*80)
     
     # Cache the successful result
     _last_result_cache = response.model_dump()

@@ -257,27 +257,30 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
         </motion.div>
 
         {/* Schedule */}
-        <motion.div variants={itemVariants}>
-          <CollapsibleSection
-            title="Event Schedule"
-            icon={<Clock className="w-5 h-5 text-primary" />}
-            isOpen={expandedSections.schedule}
-            onToggle={() => toggleSection('schedule')}
-          >
-            <ScheduleTimeline schedule={result.schedule} />
-          </CollapsibleSection>
-        </motion.div>
+        {result.schedule && result.schedule.length > 0 && (
+          <motion.div variants={itemVariants}>
+            <CollapsibleSection
+              title="Event Schedule"
+              icon={<Clock className="w-5 h-5 text-primary" />}
+              isOpen={expandedSections.schedule}
+              onToggle={() => toggleSection('schedule')}
+            >
+              <ScheduleTimeline schedule={result.schedule} />
+            </CollapsibleSection>
+          </motion.div>
+        )}
 
         {/* Speakers */}
-        <motion.div variants={itemVariants}>
-          <CollapsibleSection
-            title="Speakers"
-            icon={<Mic className="w-5 h-5 text-primary" />}
-            isOpen={expandedSections.speakers}
-            onToggle={() => toggleSection('speakers')}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {result.speakers.map((speaker, i) => (
+        {result.speakers && result.speakers.length > 0 && (
+          <motion.div variants={itemVariants}>
+            <CollapsibleSection
+              title="Speakers"
+              icon={<Mic className="w-5 h-5 text-primary" />}
+              isOpen={expandedSections.speakers}
+              onToggle={() => toggleSection('speakers')}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {result.speakers.map((speaker, i) => (
                 <Card key={i} variant="elevated">
                   <CardContent className="p-4 flex gap-4">
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center shrink-0">
@@ -299,8 +302,10 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
             </div>
           </CollapsibleSection>
         </motion.div>
+        )}
 
         {/* Catering */}
+        {result.catering && result.catering.menuPreview && result.catering.menuPreview.length > 0 && (
         <motion.div variants={itemVariants}>
           <CollapsibleSection
             title="Catering"
@@ -336,8 +341,10 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
             </div>
           </CollapsibleSection>
         </motion.div>
+        )}
 
         {/* Activities */}
+        {result.activities && result.activities.length > 0 && (
         <motion.div variants={itemVariants}>
           <CollapsibleSection
             title="Activities"
@@ -358,45 +365,49 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
             </div>
           </CollapsibleSection>
         </motion.div>
+        )}
 
         {/* Entertainment */}
-        <motion.div variants={itemVariants}>
-          <CollapsibleSection
-            title="Entertainment"
-            icon={<Music className="w-5 h-5 text-primary" />}
-            isOpen={expandedSections.entertainment}
-            onToggle={() => toggleSection('entertainment')}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {result.entertainment.map((item, i) => (
-                <Card key={i} variant="elevated">
-                  <CardContent className="p-4 text-center">
-                    <div className="w-12 h-12 mx-auto rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-3">
-                      <Music className="w-5 h-5 text-primary" />
-                    </div>
-                    <h4 className="font-semibold mb-1">{item.type}</h4>
-                    <p className="text-sm text-muted-foreground mb-2">{item.description}</p>
-                    <Badge variant="secondary">{item.cost}</Badge>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CollapsibleSection>
-        </motion.div>
+        {result.entertainment && result.entertainment.length > 0 && (
+          <motion.div variants={itemVariants}>
+            <CollapsibleSection
+              title="Entertainment"
+              icon={<Music className="w-5 h-5 text-primary" />}
+              isOpen={expandedSections.entertainment}
+              onToggle={() => toggleSection('entertainment')}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {result.entertainment.map((item, i) => (
+                  <Card key={i} variant="elevated">
+                    <CardContent className="p-4 text-center">
+                      <div className="w-12 h-12 mx-auto rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-3">
+                        <Music className="w-5 h-5 text-primary" />
+                      </div>
+                      <h4 className="font-semibold mb-1">{item.type}</h4>
+                      <p className="text-sm text-muted-foreground mb-2">{item.description}</p>
+                      <Badge variant="secondary">{item.cost}</Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </CollapsibleSection>
+          </motion.div>
+        )}
 
         {/* Communication */}
-        <motion.div variants={itemVariants}>
-          <CollapsibleSection
-            title="Communication Plan"
-            icon={<MessageSquare className="w-5 h-5 text-primary" />}
-            isOpen={expandedSections.communication}
-            onToggle={() => toggleSection('communication')}
-          >
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-semibold mb-3">Timeline</h4>
-                <div className="space-y-3">
-                  {result.communication.timeline.map((item, i) => (
+        {result.communication && result.communication.timeline && result.communication.timeline.length > 0 && (
+          <motion.div variants={itemVariants}>
+            <CollapsibleSection
+              title="Communication Plan"
+              icon={<MessageSquare className="w-5 h-5 text-primary" />}
+              isOpen={expandedSections.communication}
+              onToggle={() => toggleSection('communication')}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-semibold mb-3">Timeline</h4>
+                  <div className="space-y-3">
+                    {result.communication.timeline.map((item, i) => (
                     <div key={i} className="flex gap-3 items-start">
                       <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
                       <div>
@@ -428,6 +439,7 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
             </div>
           </CollapsibleSection>
         </motion.div>
+        )}
 
         {/* Final Plan */}
         <motion.div variants={itemVariants}>
