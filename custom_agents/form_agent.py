@@ -78,6 +78,12 @@ def create_form_agent(mcp_servers=None) -> Agent:
         - Make the form user-friendly and professional
         - Save the form and return the public sharing URL
         
+        CRITICAL URL REQUIREMENTS:
+        - The "form_url" field MUST be a valid, complete URL starting with https://
+        - DO NOT include partial URLs, relative paths, or plain text descriptions
+        - Valid format: "https://tally.so/r/xxxxx" (where xxxxx is the actual form ID)
+        - If form creation fails, use empty string "" for form_url
+        
         CRITICAL: After successful form creation, return ONLY valid JSON in this exact format:
         {"form_url": "https://tally.so/r/xxxxx", "status": "success", "form_details": "brief description"}
         

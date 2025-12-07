@@ -146,6 +146,70 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     return str;
   };
 
+  // Helper function to validate and clean URLs
+  const cleanUrl = (url: any): string | undefined => {
+    if (!url || typeof url !== 'string') return undefined;
+    
+    // Trim whitespace
+    let cleaned = url.trim();
+    
+    // If empty or just whitespace, return undefined
+    if (!cleaned || cleaned === '' || cleaned === 'N/A' || cleaned === 'TBD') return undefined;
+    
+    // Remove any URL encoding artifacts that shouldn't be there
+    // Decode first to handle double-encoding
+    try {
+      cleaned = decodeURIComponent(cleaned);
+    } catch (e) {
+      // If decoding fails, use original
+    }
+    
+    // Check if it's already a valid URL
+    try {
+      const urlObj = new URL(cleaned);
+      // If it's a valid URL, return it
+      return urlObj.href;
+    } catch (e) {
+      // Not a valid URL, try to fix it
+    }
+    
+    // If it starts with http:// or https:// but still invalid, return undefined
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      // Try to fix common issues
+      cleaned = cleaned.replace(/\s+/g, ''); // Remove all whitespace
+      try {
+        const urlObj = new URL(cleaned);
+        return urlObj.href;
+      } catch (e) {
+        return undefined; // Still invalid, skip it
+      }
+    }
+    
+    // If it looks like a domain (contains . but no protocol), try adding https://
+    if (cleaned.includes('.') && !cleaned.includes(' ')) {
+      // Remove any leading slashes
+      cleaned = cleaned.replace(/^\/+/, '');
+      // Add https:// if no protocol
+      if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+        cleaned = 'https://' + cleaned;
+        try {
+          const urlObj = new URL(cleaned);
+          return urlObj.href;
+        } catch (e) {
+          return undefined;
+        }
+      }
+    }
+    
+    // If it contains spaces or looks like plain text, it's not a valid URL
+    if (cleaned.includes(' ') || cleaned.length < 4) {
+      return undefined;
+    }
+    
+    // Last resort: return undefined for anything that doesn't look like a URL
+    return undefined;
+  };
+
   const venues = venueCandidates.map((item) => ({
     name: item.name || item.option || 'Venue',
     location: item.location || item.address || eventDetails.location,
@@ -153,7 +217,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     priceRange: formatPrice(item.priceRange || item.estimated_cost || item.cost || 'TBD'),
     rating: Number(item.rating) || 0,
     features: asArray(item.amenities || item.features),
-    link: item.website || item.link || item.url,
+    link: cleanUrl(item.website || item.link || item.url),
   }));
 
   // Extract budget breakdown - try final_plan.budget.by_category first (from coordinator), 
@@ -603,7 +667,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
   const logoData = workflow.logo as JsonRecord | undefined;
   const calendarFile = calendarInvite?.calendar_file_path as string | undefined;
   const pdfFile = workflow.pdf_report as string | undefined;
-  const formUrl = registrationForm?.form_url as string | undefined;
+  const formUrl = cleanUrl(registrationForm?.form_url as string | undefined);
   const logoFile = logoData?.logo_file_path as string | undefined;
 
   return {
