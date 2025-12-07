@@ -96,7 +96,7 @@ export function EventMap({ location, coords }: EventMapProps) {
       center={position}
       zoom={13}
       scrollWheelZoom={false}
-      style={{ height: '100%', width: '100%', minHeight: '250px' }}
+      style={{ height: '100%', width: '100%', minHeight: '250px', zIndex: 0 }}
       className="rounded-r-2xl lg:rounded-l-none rounded-b-2xl lg:rounded-b-none"
     >
       <TileLayer

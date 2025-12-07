@@ -27,7 +27,7 @@ const agentDefinitions: Record<string, { name: string; icon: string }> = {
   scheduling: { name: 'Scheduling Agent', icon: 'Clock' },
   communication: { name: 'Communication Agent', icon: 'MessageSquare' },
   calendar: { name: 'Calendar Agent', icon: 'CalendarCheck' },
-  form: { name: 'Form Agent', icon: 'Sparkles' },
+  form: { name: 'Registration Form Agent', icon: 'FileText' },
 };
 
 type JsonRecord = Record<string, any>;
@@ -157,12 +157,38 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     })
     .filter(Boolean);
 
-  const scheduleSessions = firstArray([
-    finalPlan?.schedule?.sessions,
-    schedulingData?.optimized_schedule,
-    programmeData?.programme_recommendations?.daily_schedule,
-    programmeData?.daily_schedule,
-  ]) || [];
+  // Extract schedule from multiple possible locations with better fallbacks
+  let scheduleSessions: any[] = [];
+  
+  // Try finalPlan.schedule.sessions first (most reliable)
+  if (finalPlan?.schedule?.sessions && Array.isArray(finalPlan.schedule.sessions)) {
+    scheduleSessions = finalPlan.schedule.sessions;
+  }
+  // Try schedulingData.optimized_schedule
+  else if (schedulingData?.optimized_schedule && Array.isArray(schedulingData.optimized_schedule)) {
+    scheduleSessions = schedulingData.optimized_schedule;
+  }
+  // Try programme recommendations
+  else if (programmeData?.programme_recommendations?.daily_schedule && Array.isArray(programmeData.programme_recommendations.daily_schedule)) {
+    scheduleSessions = programmeData.programme_recommendations.daily_schedule;
+  }
+  // Try programme daily_schedule
+  else if (programmeData?.daily_schedule && Array.isArray(programmeData.daily_schedule)) {
+    scheduleSessions = programmeData.daily_schedule;
+  }
+  // Try session_and_flow as fallback
+  else if (programmeData?.programme_recommendations?.session_and_flow) {
+    const sessionFlow = programmeData.programme_recommendations.session_and_flow;
+    if (typeof sessionFlow === 'object' && !Array.isArray(sessionFlow)) {
+      scheduleSessions = Object.entries(sessionFlow).map(([key, value]: [string, any]) => ({
+        name: key,
+        time: typeof value === 'string' ? value : value?.time || key,
+        duration: value?.duration || 'TBD',
+        start_time: typeof value === 'string' ? value.split('-')[0]?.trim() : value?.start_time,
+        end_time: typeof value === 'string' ? value.split('-')[1]?.trim() : value?.end_time,
+      }));
+    }
+  }
 
   const schedule = scheduleSessions.map((item: any) => {
     const timeWindow = [item.start_time, item.end_time].filter(Boolean).join(' - ');
@@ -176,6 +202,18 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
       speaker: item.speaker || item.presenter,
     };
   });
+
+  // Debug logging
+  if (schedule.length === 0) {
+    console.warn('No schedule found. Available data:', {
+      finalPlanSchedule: finalPlan?.schedule,
+      schedulingData: schedulingData?.optimized_schedule,
+      programmeData: programmeData?.programme_recommendations,
+      finalPlanKeys: finalPlan ? Object.keys(finalPlan) : [],
+    });
+  } else {
+    console.log(`✅ Found ${schedule.length} schedule items`);
+  }
 
   const speakersSource = firstArray([
     finalPlan?.recommendations?.speakers?.top_speaker_options,
@@ -249,6 +287,13 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     `Expected attendance: ${eventDetails.guestCount} guests. Budget: ${eventDetails.budget}.` +
     (schedulingData?.status === 'infeasible' ? ` Note: ${schedulingData.message || ''}` : '');
 
+  // Extract export data
+  const calendarInvite = parseJson<JsonRecord>(workflow.calendar_invite) || {};
+  const registrationForm = workflow.registration_form as JsonRecord | undefined;
+  const calendarFile = calendarInvite?.calendar_file_path as string | undefined;
+  const pdfFile = workflow.pdf_report as string | undefined;
+  const formUrl = registrationForm?.form_url as string | undefined;
+
   return {
     eventDetails,
     planningPhase: {
@@ -280,6 +325,11 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
       risks,
       actionItems,
     },
+    exports: {
+      calendarFile,
+      pdfFile,
+      formUrl,
+    },
     success: Boolean(workflow.success ?? true),
   };
 };
@@ -298,8 +348,10 @@ const Index = () => {
   useEffect(() => {
     if (appState !== 'processing') return;
 
+    let progressInterval: NodeJS.Timeout | null = null;
+
     // Poll for progress updates every 500ms
-    const progressInterval = setInterval(async () => {
+    progressInterval = setInterval(async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/plan/status`);
         if (response.ok) {
@@ -307,8 +359,33 @@ const Index = () => {
           
           console.log('Progress update:', progress);
           
-          // If phase_2 is active and we have agents, populate them
-          if (progress.phase === 'phase_2' && progress.agents && progress.agents.length > 0) {
+          // Check if workflow is complete
+          if (progress.status === 'completed' || progress.phase === 'complete') {
+            // Final update - ensure all agents show as completed
+            if (progress.agents && progress.agents.length > 0) {
+              const backendStatuses = progress.agents as Array<{ name: string; status: string }>;
+              const usedAgents: Agent[] = backendStatuses.map((bs) => {
+                const agentDef = agentDefinitions[bs.name] || { name: bs.name, icon: 'Sparkles' };
+                return {
+                  id: bs.name,
+                  name: agentDef.name,
+                  icon: agentDef.icon,
+                  status: 'completed' as const,
+                  message: 'Completed',
+                  progress: 100,
+                };
+              });
+              setAgents(usedAgents);
+            }
+            // Stop polling - workflow is done
+            if (progressInterval) {
+              clearInterval(progressInterval);
+            }
+            return;
+          }
+          
+          // If phase_2 or phase_4 is active and we have agents, populate them
+          if ((progress.phase === 'phase_2' || progress.phase === 'phase_4') && progress.agents && progress.agents.length > 0) {
             const backendStatuses = progress.agents as Array<{ name: string; status: string }>;
             
             const usedAgents: Agent[] = backendStatuses.map((bs) => {
@@ -339,7 +416,11 @@ const Index = () => {
       }
     }, 500);
 
-    return () => clearInterval(progressInterval);
+    return () => {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+    };
   }, [appState]);
 
   const planMutation = useMutation<PlanApiResponse, Error, EventFormData>({

@@ -32,6 +32,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { BudgetChart } from './BudgetChart';
 import { ScheduleTimeline } from './ScheduleTimeline';
 import { EventMap } from './EventMap';
+import { ExportMenu } from './ExportMenu';
 
 interface ResultsViewProps {
   result: EventPlanResult;
@@ -85,10 +86,11 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
             <RotateCcw className="w-4 h-4" />
             Start Over
           </Button>
-          <Button variant="default" size="sm">
-            <Download className="w-4 h-4" />
-            Export
-          </Button>
+          <ExportMenu
+            calendarFile={result.exports?.calendarFile}
+            pdfFile={result.exports?.pdfFile}
+            formUrl={result.exports?.formUrl}
+          />
         </div>
       </motion.div>
 
@@ -129,7 +131,7 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
                 </div>
               </div>
               {/* Map */}
-              <div className="h-64 lg:h-auto min-h-[250px]">
+              <div className="h-64 lg:h-auto min-h-[250px] relative z-0">
                 <EventMap 
                   location={result.eventDetails.location} 
                   coords={result.eventDetails.coords}
@@ -456,17 +458,19 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-semibold mb-3">Timeline</h4>
-                  <div className="space-y-2">
-                    {result.finalPlan.timeline.map((item, i) => (
-                      <div key={i} className="flex gap-3 items-start text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-accent mt-0.5 shrink-0" />
-                        {item}
-                      </div>
-                    ))}
+                {result.finalPlan.timeline && result.finalPlan.timeline.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-3">Timeline</h4>
+                    <div className="space-y-2">
+                      {result.finalPlan.timeline.map((item, i) => (
+                        <div key={i} className="flex gap-3 items-start text-sm">
+                          <CheckCircle2 className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+                          {item}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div>
                   <h4 className="font-semibold mb-3">Risks & Mitigations</h4>

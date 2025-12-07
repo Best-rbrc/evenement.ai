@@ -118,6 +118,11 @@ export interface EventPlanResult {
     risks: { risk: string; mitigation: string }[];
     actionItems: { task: string; owner: string; deadline: string; priority: 'high' | 'medium' | 'low' }[];
   };
+  exports?: {
+    calendarFile?: string;
+    pdfFile?: string;
+    formUrl?: string;
+  };
   success: boolean;
 }
 
