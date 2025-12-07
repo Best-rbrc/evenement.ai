@@ -243,7 +243,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
   }));
 
   const features = [
-    { icon: Brain, title: "13 Agents & 1 Coordinator", description: "Specialized agents for every aspect of event planning" },
+    { icon: Brain, title: "12 Agents & 1 Coordinator", description: "Specialized agents for every aspect of event planning" },
     { icon: Zap, title: "Real-time Processing", description: "Watch your event plan come together live" },
     { icon: Calendar, title: "Complete Plans", description: "From venue to catering to entertainment" },
     { icon: Users, title: "Guest Management", description: "Handle events from 10 to 10,000 attendees" },
@@ -285,15 +285,56 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
       >
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <motion.div 
-            className="flex items-center gap-3"
+            className="flex items-center gap-3 group"
             whileHover={{ scale: 1.02 }}
           >
             <motion.div
-              className="w-12 h-12 rounded-xl bg-gradient-to-br from-soft-coral to-rose-gold flex items-center justify-center shadow-glow"
+              className="relative w-12 h-12 flex items-center justify-center"
               animate={{ rotate: [0, 5, -5, 0] }}
               transition={{ duration: 4, repeat: Infinity }}
             >
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
+              {/* Custom logo - stylized "E" with event elements */}
+              <svg 
+                viewBox="0 0 40 40" 
+                className="w-12 h-12 group-hover:scale-105 transition-transform drop-shadow-lg"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                {/* Background circle with gradient */}
+                <defs>
+                  <linearGradient id="logoGradientLanding" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#E67E5A" />
+                    <stop offset="100%" stopColor="#D4A574" />
+                  </linearGradient>
+                  <filter id="glow">
+                    <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                    <feMerge>
+                      <feMergeNode in="coloredBlur"/>
+                      <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                  </filter>
+                </defs>
+                <circle cx="20" cy="20" r="18" fill="url(#logoGradientLanding)" filter="url(#glow)" />
+                
+                {/* Stylized "E" letter */}
+                <path 
+                  d="M12 10 L12 30 M12 10 L28 10 M12 20 L24 20 M12 30 L28 30" 
+                  stroke="white" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                
+                {/* Decorative event dots */}
+                <circle cx="26" cy="14" r="2" fill="white" opacity="0.9">
+                  <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite" />
+                  <animateTransform attributeName="transform" type="scale" values="1;1.2;1" dur="2s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="26" cy="26" r="2" fill="white" opacity="0.9">
+                  <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" begin="0.5s" repeatCount="indefinite" />
+                  <animateTransform attributeName="transform" type="scale" values="1;1.2;1" dur="2s" begin="0.5s" repeatCount="indefinite" />
+                </circle>
+              </svg>
             </motion.div>
             <span className="text-2xl font-display font-bold text-foreground">
               Évènement.ai
@@ -327,7 +368,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
               >
                 <Sparkles className="w-4 h-4 text-soft-coral" />
               </motion.div>
-              <span className="text-sm font-medium">Powered by 13 agents and 1 coordinator</span>
+              <span className="text-sm font-medium">Powered by 12 agents and 1 coordinator</span>
             </motion.div>
 
             {/* Main heading */}
@@ -350,7 +391,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
             >
-              From corporate conferences to dream weddings, watch 11 specialized AI agents
+              From corporate conferences to dream weddings, watch 12 specialized AI agents
               create your perfect event plan in real-time.
             </motion.p>
 
@@ -433,7 +474,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
               viewport={{ once: true }}
             >
               {[
-                { value: 11, suffix: "", label: "AI Agents" },
+                { value: 12, suffix: "", label: "AI Agents" },
                 { value: 50000, suffix: "+", label: "Events Planned" },
                 { value: 99, suffix: "%", label: "Success Rate" },
                 { value: 24, suffix: "/7", label: "Availability" },
@@ -536,7 +577,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
         {/* Footer */}
         <footer className="py-8 px-4 border-t border-border/50">
           <div className="max-w-6xl mx-auto text-center text-muted-foreground">
-            <p>© 2024 Évènement.ai. Powered by 13 agents and 1 coordinator • Built with love</p>
+            <p>© 2025 Évènement.ai. Powered by 12 agents and 1 coordinator • Built with love and a lot of pain</p>
           </div>
         </footer>
       </div>

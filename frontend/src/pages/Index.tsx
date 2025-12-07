@@ -131,11 +131,26 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     programmeData?.programme_recommendations?.options,
   ]) || [];
 
+  // Helper function to format prices with $ symbol
+  const formatPrice = (value: any): string => {
+    if (!value || value === 'TBD' || value === 'N/A') return value || 'TBD';
+    const str = String(value);
+    // If it already starts with $, return as is
+    if (str.startsWith('$')) return str;
+    // If it's a number or numeric string, add $
+    const num = parseFloat(str.replace(/[^0-9.-]/g, ''));
+    if (!isNaN(num)) {
+      // Format with commas for thousands
+      return `$${num.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    }
+    return str;
+  };
+
   const venues = venueCandidates.map((item) => ({
     name: item.name || item.option || 'Venue',
     location: item.location || item.address || eventDetails.location,
     capacity: String(item.capacity || 'N/A'),
-    priceRange: item.priceRange || item.estimated_cost || item.cost || 'TBD',
+    priceRange: formatPrice(item.priceRange || item.estimated_cost || item.cost || 'TBD'),
     rating: Number(item.rating) || 0,
     features: asArray(item.amenities || item.features),
     link: item.website || item.link || item.url,
@@ -398,7 +413,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
   const entertainment = entertainmentSource.map((item: any) => ({
     type: item.name || 'Entertainment',
     description: item.description || '',
-    cost: String(item.cost_estimate || item.cost || ''),
+    cost: formatPrice(item.cost_estimate || item.cost || ''),
   }));
 
   const commRecommendations = communicationData?.communication_recommendations || communicationData || {};
@@ -465,10 +480,122 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     priority: (item.priority as 'high' | 'medium' | 'low') || (index < 3 ? 'high' : 'medium'),
   }));
 
-  const executiveSummary = finalPlan?.executive_summary ||
-    `${eventDetails.name} is a ${eventDetails.type} scheduled for ${eventDetails.date} at ${eventDetails.location}. ` +
-    `Expected attendance: ${eventDetails.guestCount} guests. Budget: ${eventDetails.budget}.` +
-    (schedulingData?.status === 'infeasible' ? ` Note: ${schedulingData.message || ''}` : '');
+  // Extract executive summary - handle both string and JSON object formats
+  let executiveSummary: string = '';
+  if (finalPlan?.executive_summary) {
+    const summary = finalPlan.executive_summary;
+    if (typeof summary === 'string') {
+      const trimmed = summary.trim();
+      // Check if it's a JSON string that needs parsing
+      if (trimmed.startsWith('{') && trimmed.includes('"executive_summary"')) {
+        try {
+          // Try to parse the JSON - handle both complete and incomplete JSON
+          let jsonStr = trimmed;
+          // If it's incomplete (missing closing brace), try to complete it
+          if (!jsonStr.endsWith('}')) {
+            // Find the last complete quote and add closing brace
+            const lastQuote = jsonStr.lastIndexOf('"');
+            if (lastQuote > 0) {
+              jsonStr = jsonStr.substring(0, lastQuote + 1) + '}';
+            }
+          }
+          const parsed = JSON.parse(jsonStr);
+          if (typeof parsed === 'object' && parsed !== null && parsed.executive_summary) {
+            executiveSummary = String(parsed.executive_summary);
+          } else {
+            executiveSummary = trimmed;
+          }
+        } catch (e) {
+          // If JSON parsing fails, try to extract the text manually
+          // Find the start of the value (after "executive_summary": ")
+          const startPattern = /"executive_summary"\s*:\s*"/;
+          const startMatch = trimmed.match(startPattern);
+          
+          if (startMatch && startMatch.index !== undefined) {
+            const startIdx = startMatch.index + startMatch[0].length;
+            // Find the end - look for the last quote before closing brace or end of string
+            // Handle escaped quotes properly
+            let endIdx = startIdx;
+            let inString = true;
+            let escaped = false;
+            
+            for (let i = startIdx; i < trimmed.length; i++) {
+              const char = trimmed[i];
+              if (escaped) {
+                escaped = false;
+                continue;
+              }
+              if (char === '\\') {
+                escaped = true;
+                continue;
+              }
+              if (char === '"' && inString) {
+                // Check if this is the closing quote (not followed by more content before })
+                const remaining = trimmed.substring(i + 1).trim();
+                if (remaining.startsWith('}') || remaining === '') {
+                  endIdx = i;
+                  break;
+                }
+              }
+            }
+            
+            if (endIdx > startIdx) {
+              executiveSummary = trimmed.substring(startIdx, endIdx)
+                .replace(/\\n/g, '\n')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\')
+                .replace(/\\t/g, '\t')
+                .replace(/\\r/g, '\r');
+            } else {
+              // No closing quote found, take everything after the opening quote
+              executiveSummary = trimmed.substring(startIdx)
+                .replace(/\\n/g, '\n')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\')
+                .replace(/\\t/g, '\t')
+                .replace(/\\r/g, '\r');
+            }
+          } else {
+            // Last resort: just remove the JSON wrapper
+            executiveSummary = trimmed
+              .replace(/^\{\s*"executive_summary"\s*:\s*"/, '')
+              .replace(/"\s*\}$/, '')
+              .replace(/\\n/g, '\n')
+              .replace(/\\"/g, '"')
+              .replace(/\\\\/g, '\\');
+          }
+        }
+      } else {
+        executiveSummary = trimmed;
+      }
+    } else if (typeof summary === 'object' && summary !== null) {
+      // If it's already an object, try to extract the value
+      if ('executive_summary' in summary) {
+        executiveSummary = String(summary.executive_summary);
+      } else {
+        executiveSummary = JSON.stringify(summary);
+      }
+    } else {
+      executiveSummary = String(summary);
+    }
+  }
+  
+  // Clean up escaped characters
+  if (executiveSummary) {
+    executiveSummary = executiveSummary
+      .replace(/\\n/g, '\n')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+      .replace(/\\t/g, '\t')
+      .trim();
+  }
+  
+  // Fallback if no executive summary found
+  if (!executiveSummary) {
+    executiveSummary = `${eventDetails.name} is a ${eventDetails.type} scheduled for ${eventDetails.date} at ${eventDetails.location}. ` +
+      `Expected attendance: ${eventDetails.guestCount} guests. Budget: ${eventDetails.budget}.` +
+      (schedulingData?.status === 'infeasible' ? ` Note: ${schedulingData.message || ''}` : '');
+  }
 
   // Extract export data
   const calendarInvite = parseJson<JsonRecord>(workflow.calendar_invite) || {};
@@ -499,7 +626,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     catering: {
       menuPreview: asArray(cateringSource.menu_overview || []),
       dietaryOptions: asArray(cateringSource.dietary_accommodations || []),
-      estimatedCost: cateringSource.budget_estimate?.total || cateringSource.estimated_total || cateringSource.estimatedCost || 'TBD',
+      estimatedCost: formatPrice(cateringSource.budget_estimate?.total || cateringSource.estimated_total || cateringSource.estimatedCost || 'TBD'),
     },
     activities,
     entertainment,
@@ -761,17 +888,45 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen gradient-hero">
+    <div className="min-h-screen gradient-hero flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-50 glass-panel border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <button 
               onClick={() => setAppState('landing')}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity group"
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-soft-coral to-rose-gold flex items-center justify-center shadow-glow">
-                <Sparkles className="w-5 h-5 text-primary-foreground" />
+              <div className="relative w-10 h-10 flex items-center justify-center">
+                {/* Custom logo - stylized "E" with event elements */}
+                <svg 
+                  viewBox="0 0 40 40" 
+                  className="w-10 h-10 group-hover:scale-105 transition-transform"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  {/* Background circle with gradient */}
+                  <defs>
+                    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#E67E5A" />
+                      <stop offset="100%" stopColor="#D4A574" />
+                    </linearGradient>
+                  </defs>
+                  <circle cx="20" cy="20" r="18" fill="url(#logoGradient)" className="drop-shadow-lg" />
+                  
+                  {/* Stylized "E" letter */}
+                  <path 
+                    d="M12 10 L12 30 M12 10 L28 10 M12 20 L24 20 M12 30 L28 30" 
+                    stroke="white" 
+                    strokeWidth="2.5" 
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  
+                  {/* Decorative event dots */}
+                  <circle cx="26" cy="14" r="2" fill="white" opacity="0.9" />
+                  <circle cx="26" cy="26" r="2" fill="white" opacity="0.9" />
+                </svg>
               </div>
               <span className="text-xl font-display font-bold text-foreground">
                 Évènement.ai
@@ -783,7 +938,7 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <main className="py-8 md:py-12">
+      <main className="py-8 md:py-12 flex-1">
         <AnimatePresence mode="wait">
           {appState === 'form' && (
             <motion.div
@@ -824,9 +979,9 @@ const Index = () => {
       </main>
 
       {/* Footer */}
-      <footer className="py-6 border-t border-border/50">
+      <footer className="py-6 border-t border-border/50 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          Powered by 13 agents and 1 coordinator • Built with love
+          Powered by 12 agents and 1 coordinator • Built with love and a lot of pain
         </div>
       </footer>
 
