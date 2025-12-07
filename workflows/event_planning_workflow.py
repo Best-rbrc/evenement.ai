@@ -607,7 +607,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         _tally_server_ref = None
 
     # Create all available specialists (coordinator will decide which to use)
-    # Note: calendar and form are NOT in this list because they're Phase 4 output generators,
+    # Note: calendar form and Logo are NOT in this list because they're Phase 4 output generators,
     # not Phase 2 domain specialists. They're created separately below after Phase 2 execution.
     all_agent_types = [
         "venue", "catering", "programme", "speakers", 
@@ -1611,11 +1611,13 @@ Output JSON with:
                         raise ValueError("No JSON found")
                 final_plan_parsed = json.loads(json_str)
             except:
-                final_plan_parsed = {"executive_summary": final_plan_parsed[:1000]}
+                # Don't truncate - preserve full text
+                final_plan_parsed = {"executive_summary": final_plan_parsed}
     
     # Validate final_plan has required structure
     if not isinstance(final_plan_parsed, dict):
-        final_plan_parsed = {"executive_summary": str(final_plan_parsed)[:1000]}
+        # Don't truncate - preserve full text
+        final_plan_parsed = {"executive_summary": str(final_plan_parsed)}
     
     # Ensure timeline exists (even if empty)
     if "timeline" not in final_plan_parsed:
