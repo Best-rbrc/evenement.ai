@@ -122,93 +122,216 @@ export function EventForm({ onSubmit }: EventFormProps) {
     }).format(value);
   };
 
-  const startVoiceInput = () => {
+  const startVoiceInput = async () => {
+    console.log('🎤 Voice input button clicked');
+    
+    // Check browser support
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('Speech recognition is not supported in your browser. Please use Chrome or Edge.');
+      console.error('❌ Speech recognition not supported');
+      return;
+    }
+    
+    // Check microphone permission
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ Microphone access granted');
+      stream.getTracks().forEach(track => track.stop()); // Stop the test stream
+    } catch (error) {
+      console.error('❌ Microphone permission denied or error:', error);
+      alert('Microphone access is required for voice input. Please grant microphone permission and try again.');
       return;
     }
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    try {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
 
-    recognition.onstart = () => {
-      setIsListening(true);
-      transcriptRef.current = '';
-    };
+      recognition.onstart = () => {
+        console.log('✅ Speech recognition started');
+        setIsListening(true);
+        transcriptRef.current = '';
+      };
 
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript + ' ';
+      recognition.onresult = (event: any) => {
+        // Build transcript from all results in this event
+        let interimTranscript = '';
+        let finalTranscript = '';
+        
+        for (let i = 0; i < event.results.length; i++) {
+          const transcriptText = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcriptText + ' ';
+            console.log('✅ Final segment:', transcriptText);
+          } else {
+            interimTranscript += transcriptText + ' ';
+            console.log('⏳ Interim segment:', transcriptText);
+          }
         }
-      }
-      if (finalTranscript) {
-        transcriptRef.current += finalTranscript;
-      }
-    };
+        
+        // Always update with final results (these are confirmed)
+        if (finalTranscript) {
+          transcriptRef.current += finalTranscript;
+          console.log('📝 Updated transcript (added final):', transcriptRef.current);
+        }
+        
+        // For interim results, we'll capture them when stopping
+        // Store the latest interim transcript separately
+        if (interimTranscript && !finalTranscript) {
+          // If we only have interim, store it (will be used if user stops before final)
+          const currentFinal = transcriptRef.current;
+          transcriptRef.current = currentFinal + interimTranscript;
+          console.log('📝 Updated transcript (interim only):', transcriptRef.current);
+        }
+      };
 
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
+      recognition.onerror = (event: any) => {
+        console.error('❌ Speech recognition error:', event.error);
+        setIsListening(false);
+        
+        // Show user-friendly error messages
+        let errorMessage = 'Speech recognition error occurred.';
+        switch (event.error) {
+          case 'no-speech':
+            errorMessage = 'No speech detected. Please try speaking again.';
+            break;
+          case 'audio-capture':
+            errorMessage = 'Microphone not found or not accessible. Please check your microphone permissions.';
+            break;
+          case 'not-allowed':
+            errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings and try again.';
+            break;
+          case 'network':
+            errorMessage = 'Network error. Please check your connection.';
+            break;
+          case 'aborted':
+            // User stopped, no need to show error
+            return;
+          default:
+            errorMessage = `Speech recognition error: ${event.error}. Please try again.`;
+        }
+        alert(errorMessage);
+      };
+
+      recognition.onend = () => {
+        console.log('🛑 Speech recognition ended');
+        console.log('📝 Final transcript at end:', transcriptRef.current);
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      console.log('🚀 Starting speech recognition...');
+      recognition.start();
+    } catch (error) {
+      console.error('❌ Failed to start speech recognition:', error);
+      alert(`Failed to start voice input: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or use Chrome/Edge browser.`);
       setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+    }
   };
 
   const stopVoiceInput = async () => {
+    console.log('🛑 stopVoiceInput called');
+    console.log('🔍 recognitionRef.current exists:', !!recognitionRef.current);
+    
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      const recognition = recognitionRef.current;
+      
+      // Log current transcript before stopping
+      console.log('📝 Transcript before stop:', transcriptRef.current);
+      
+      // Stop the recognition - this will trigger onend
+      recognition.stop();
       setIsListening(false);
 
-      const transcript = transcriptRef.current.trim();
-      if (transcript) {
-        setIsProcessing(true);
-        try {
-          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-          const response = await fetch(`${API_BASE_URL}/api/voice-to-form`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transcript })
-          });
+      // Wait for onend and any final onresult events to complete
+      // The API may fire final results when stopping
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-          if (!response.ok) throw new Error('Failed to process voice input');
-
-          const data = await response.json();
-          
-          // Auto-fill form with extracted data (only non-null values)
-          if (data.eventType) setValue('eventType', data.eventType, { shouldValidate: true });
-          if (data.customEventType) setValue('customEventType', data.customEventType, { shouldValidate: true });
-          if (data.eventName) setValue('eventName', data.eventName, { shouldValidate: true });
-          if (data.dateType) setValue('dateType', data.dateType, { shouldValidate: true });
-          if (data.eventDate) setValue('eventDate', data.eventDate, { shouldValidate: true });
-          if (data.endDate) setValue('endDate', data.endDate, { shouldValidate: true });
-          if (data.startTime) setValue('startTime', data.startTime, { shouldValidate: true });
-          if (data.endTime) setValue('endTime', data.endTime, { shouldValidate: true });
-          if (data.locationPreference) setValue('locationPreference', data.locationPreference, { shouldValidate: true });
-          if (data.budgetMin !== null && data.budgetMin !== undefined) setValue('budgetMin', data.budgetMin, { shouldValidate: true });
-          if (data.budgetMax !== null && data.budgetMax !== undefined) setValue('budgetMax', data.budgetMax, { shouldValidate: true });
-          if (data.guestCountMin !== null && data.guestCountMin !== undefined) setValue('guestCountMin', data.guestCountMin, { shouldValidate: true });
-          if (data.guestCountMax !== null && data.guestCountMax !== undefined) setValue('guestCountMax', data.guestCountMax, { shouldValidate: true });
-          if (data.specialRequirements) setValue('specialRequirements', data.specialRequirements, { shouldValidate: true });
-
-          transcriptRef.current = '';
-        } catch (error) {
-          console.error('Error processing voice input:', error);
-          alert('Failed to process voice input. Please try again.');
-        } finally {
-          setIsProcessing(false);
-        }
+      // Get the final transcript
+      let transcript = transcriptRef.current.trim();
+      
+      console.log('🎤 Voice input stopped.');
+      console.log('📝 Final transcript:', transcript);
+      console.log('📏 Transcript length:', transcript.length);
+      console.log('📏 Transcript characters:', transcript.split('').map(c => `'${c}'`).join(''));
+      
+      if (!transcript) {
+        console.error('❌ No transcript available!');
+        console.error('   Possible causes:');
+        console.error('   1. User did not speak (check microphone)');
+        console.error('   2. Microphone permission denied (check browser permissions)');
+        console.error('   3. Speech recognition error (check onerror logs above)');
+        console.error('   4. Browser compatibility issue (try Chrome/Edge)');
+        console.error('   5. onresult event never fired or fired with empty data');
+        alert('No speech detected. Please:\n1. Make sure your microphone is working\n2. Grant microphone permission in your browser\n3. Try speaking again\n4. Check the browser console for details');
+        return;
       }
+
+      setIsProcessing(true);
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const url = `${API_BASE_URL}/api/voice-to-form`;
+        const payload = { transcript };
+        
+        console.log('📤 Sending voice transcript to server:', url);
+        console.log('📝 Payload:', payload);
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        console.log('📥 Response received:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          headers: Object.fromEntries(response.headers.entries())
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ Server error response:', errorText);
+          throw new Error(`Server error: ${response.status} ${response.statusText}. ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('✅ Received data from server:', data);
+        
+        // Auto-fill form with extracted data (only non-null values)
+        if (data.eventType) setValue('eventType', data.eventType, { shouldValidate: true });
+        if (data.customEventType) setValue('customEventType', data.customEventType, { shouldValidate: true });
+        if (data.eventName) setValue('eventName', data.eventName, { shouldValidate: true });
+        if (data.dateType) setValue('dateType', data.dateType, { shouldValidate: true });
+        if (data.eventDate) setValue('eventDate', data.eventDate, { shouldValidate: true });
+        if (data.endDate) setValue('endDate', data.endDate, { shouldValidate: true });
+        if (data.startTime) setValue('startTime', data.startTime, { shouldValidate: true });
+        if (data.endTime) setValue('endTime', data.endTime, { shouldValidate: true });
+        if (data.locationPreference) setValue('locationPreference', data.locationPreference, { shouldValidate: true });
+        if (data.budgetMin !== null && data.budgetMin !== undefined) setValue('budgetMin', data.budgetMin, { shouldValidate: true });
+        if (data.budgetMax !== null && data.budgetMax !== undefined) setValue('budgetMax', data.budgetMax, { shouldValidate: true });
+        if (data.guestCountMin !== null && data.guestCountMin !== undefined) setValue('guestCountMin', data.guestCountMin, { shouldValidate: true });
+        if (data.guestCountMax !== null && data.guestCountMax !== undefined) setValue('guestCountMax', data.guestCountMax, { shouldValidate: true });
+        if (data.specialRequirements) setValue('specialRequirements', data.specialRequirements, { shouldValidate: true });
+
+        console.log('✅ Form auto-filled successfully');
+        transcriptRef.current = '';
+      } catch (error) {
+        console.error('❌ Error processing voice input:', error);
+        if (error instanceof Error) {
+          console.error('❌ Error message:', error.message);
+          console.error('❌ Error stack:', error.stack);
+        }
+        alert(`Failed to process voice input: ${error instanceof Error ? error.message : 'Unknown error'}. Please check the browser console for details.`);
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      console.warn('⚠️ No recognition instance available');
     }
   };
 
