@@ -1,4 +1,5 @@
 from agents import Agent, function_tool, WebSearchTool
+from workflows.schemas import schema_to_json_example
 
 def create_activities_agent() -> Agent:
     """Create an activities specialist agent."""
@@ -25,14 +26,7 @@ def create_activities_agent() -> Agent:
         Always consider group dynamics, objectives, and safety requirements.
         
         Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-        {
-          "activity_planning": {
-            "summary": "str",
-            "recommendations": [{"name": "str", "description": "str", "duration": "str", "cost_estimate":  "str", "notes": "str"}],
-            "logistics": ["str"],
-            "budget_estimate": {"total": "str", "breakdown": {"item":  "str"}}
-          }
-        }
+""" + schema_to_json_example("activities") + """
         """
     )
 

@@ -2,6 +2,7 @@
 from agents import Agent, function_tool
 from typing import Dict, List, Any
 import json
+from workflows.schemas import schema_to_json_example
 
 
 @function_tool
@@ -457,14 +458,8 @@ def create_budgeting_agent() -> Agent:
         5. Validate JSON syntax before returning
         
         REQUIRED STRUCTURE:
-        {
-          "budget_allocation_recommended": {"venue": {"recommended_spend": 3000, "pct_of_total": 0.30, "notes": "Primary cost driver"}, "catering": {"recommended_spend": 2500, "pct_of_total": 0.25, "notes": "Per-person costs"}},
-          "major_category_breakdowns": {"venue": {"recommended_spend": 3000, "pct_of_total": 0.30, "key_assumptions": ["Venue includes AV", "100 guests"]}},
-          "what_if_scenarios": [{"name": "Scenario 1", "delta": "+15% budget", "impact": "Allows premium venue", "recommendation": "If funds available"}],
-          "scenario_recommendation": {"name": "Base case", "reason": "Balanced allocation"},
-          "allocation_rationale": "Based on industry standards and priorities",
-          "warnings": []
-        }
+""" + schema_to_json_example("budgeting") + """
+        
         ALWAYS include budget_allocation_recommended - this is CRITICAL.
         """,
         tools=[

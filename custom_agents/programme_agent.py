@@ -1,4 +1,5 @@
 from agents import Agent, function_tool, WebSearchTool
+from workflows.schemas import schema_to_json_example
 
 @function_tool
 def create_event_schedule(event_name: str, event_duration: str, session_count: int) -> str:
@@ -49,39 +50,7 @@ def create_programme_agent() -> Agent:
         6. NO extra text before or after JSON
         
         REQUIRED STRUCTURE:
-{
-  "summary": "string",
-  "programme_recommendations": {
-    "options": [
-      {
-        "name": "string",
-        "description": "string",
-        "capacity": "string",
-        "cost": "string",
-        "amenities": ["string"],
-        "dependencies": ["string"]
-      }
-    ],
-    "timeline_and_logistics": ["string"],
-    "session_and_flow": {
-      "morning_session": "string",
-      "afternoon_session": "string"
-    },
-    "breaks_networking": ["string"],
-    "technical_and_materials_requirements": ["string"],
-    "contingency_plans": ["string"],
-    "top_recommendation": {
-      "option": "string",
-      "rationale": "string",
-      "dependencies": ["string"]
-    },
-    "backup_option": {
-      "option": "string",
-      "rationale": "string"
-    }
-  },
-  "next_steps": ["string"]
-}
+""" + schema_to_json_example("programme") + """
         """,
         tools=[create_event_schedule, plan_session_flow, create_break_schedule]
     )

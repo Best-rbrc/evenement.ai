@@ -1,4 +1,5 @@
 from agents import Agent, function_tool, WebSearchTool
+from workflows.schemas import schema_to_json_example
 
 
 @function_tool
@@ -50,13 +51,8 @@ def create_catering_agent() -> Agent:
         6. NO extra text before or after JSON
         
         REQUIRED STRUCTURE:
-        {
-          "summary": "Recommend buffet-style catering with 3-course option, $30/person",
-          "menu_overview": ["Appetizer station", "Main course buffet", "Dessert selection"],
-          "dietary_accommodations": ["Vegetarian options available", "Gluten-free meals", "Vegan alternatives"],
-          "budget_estimate": {"per_person": 30, "total": 3000, "notes": "Includes beverages and service"},
-          "timeline_and_logistics": ["Order by month X", "Delivery at 10am day-of", "Setup 30 mins before"]
-        }
+""" + schema_to_json_example("catering") + """
+        
         ALWAYS include summary field - this is CRITICAL.
         """,
         tools=[search_caterers, create_menu, get_catering_quote]

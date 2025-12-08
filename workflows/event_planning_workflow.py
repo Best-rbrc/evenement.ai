@@ -737,10 +737,10 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     try:
         from tools.report_generator import generate_event_proposal_pdf
         
-        # Validate final plan against schema (this enforces timeline field)
+        # Validate final plan against schema (this enforces timeline field and recommendations)
         try:
-            final_plan_dict = validate_agent_output("final_plan", final_result.final_output)
-            print(f"✅ Final plan validated successfully (includes timeline: {bool(final_plan_dict.get('timeline'))})")
+            final_plan_dict = validate_agent_output("final_plan", final_result.final_output, required_agents=required_agents)
+            print(f"✅ Final plan validated successfully (includes timeline: {bool(final_plan_dict.get('timeline'))}, recommendations: {bool(final_plan_dict.get('recommendations'))})")
         except ValueError as e:
             print(f"⚠️  Final plan schema validation error: {e}")
             print(f"   This means the coordinator did not generate all required fields (including timeline)")

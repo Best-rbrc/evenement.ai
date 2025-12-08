@@ -3,6 +3,7 @@ import datetime
 import os
 from typing import Dict, Any
 import uuid
+from workflows.schemas import schema_to_json_example
 
 
 @function_tool
@@ -274,7 +275,8 @@ def create_calendar_agent(mcp_servers=None) -> Agent:
         Always provide clear feedback on file creation success and location.
         Handle errors gracefully and suggest alternatives when issues occur.
 
-        Output your recommendations in JSON format with calendar file details and timing information.
+        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
+""" + schema_to_json_example("calendar") + """
         """,
         "tools": tools,
     }

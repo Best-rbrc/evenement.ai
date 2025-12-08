@@ -1,4 +1,5 @@
 from agents import Agent, function_tool, WebSearchTool
+from workflows.schemas import schema_to_json_example
 
 @function_tool
 def search_speakers(topic: str, event_type: str, budget_range: str) -> str:
@@ -49,19 +50,7 @@ def create_speakers_agent() -> Agent:
         6. Keep response concise to avoid parsing issues
         
         REQUIRED STRUCTURE:
-        {
-          "summary": "2-3 keynote speakers for tech event",
-          "speakers_recommendations": {
-            "primary_objectives": ["Attract audience", "Industry credibility"],
-            "top_speaker_options": [{"name": "Expert Name", "bio": "Brief bio", "estimated_fee": 5000, "ideal_role": "Keynote", "logistics": "Travel included", "rationale": "Relevant expertise"}],
-            "honorarium_budget_itemization": {"keynote_1": 5000, "keynote_2": 3000},
-            "timeline_logistics": ["Speaker confirmation by month X"],
-            "technical_dependencies": ["Presentation setup"],
-            "other_dependencies": ["Travel arrangements"],
-            "backup_plan": {"virtual_alternative": "Virtual keynote", "local_rising_star": "Local expert"}
-          },
-          "recommendation_rationale": "Strong speaker lineup ensures engagement"
-        }
+""" + schema_to_json_example("speakers") + """
         """,
         tools=[search_speakers, get_speaker_details, coordinate_speaker_logistics]
     )
