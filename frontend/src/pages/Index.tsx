@@ -690,6 +690,7 @@ const Index = () => {
   const [appState, setAppState] = useState<AppState>(skipToResults ? 'processing' : 'landing');
   const [agents, setAgents] = useState<Agent[]>(initialAgents);
   const [eventResult, setEventResult] = useState<EventPlanResult | null>(null);
+  const [originalWorkflowResult, setOriginalWorkflowResult] = useState<PlanApiResponse | null>(null);
   const [formData, setFormData] = useState<EventFormData | null>(null);
   const [devSettings, setDevSettings] = useState<DevSettings>({ enableSandbox: false, enableSMS: false });
   const { toast } = useToast();
@@ -823,6 +824,7 @@ const Index = () => {
         onSuccess: (apiResponse) => {
           const mapped = mapWorkflowToEventResult(apiResponse, mockFormData);
           setEventResult(mapped);
+          setOriginalWorkflowResult(apiResponse);
           setAgents((prev) => prev.map((agent) => ({ ...agent, status: 'completed', message: 'Completed', progress: 100 })));
           setAppState('results');
         },
@@ -854,12 +856,13 @@ const Index = () => {
     const dataWithSettings = { ...data, ...devSettings };
 
     planMutation.mutate(dataWithSettings, {
-      onSuccess: (apiResponse) => {
-        const mapped = mapWorkflowToEventResult(apiResponse, data);
-        setEventResult(mapped);
-        
-        // Log the response for debugging
-        console.log('API Response:', apiResponse);
+        onSuccess: (apiResponse) => {
+          const mapped = mapWorkflowToEventResult(apiResponse, data);
+          setEventResult(mapped);
+          setOriginalWorkflowResult(apiResponse);
+          
+          // Log the response for debugging
+          console.log('API Response:', apiResponse);
         console.log('Agent statuses:', apiResponse.result?.agent_statuses);
         
         // Map backend agent_statuses to frontend agents
@@ -1009,7 +1012,21 @@ const Index = () => {
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.3 }}
             >
-              <ResultsView result={eventResult} onStartOver={handleStartOver} />
+              <ResultsView 
+                result={eventResult} 
+                onStartOver={handleStartOver}
+                originalWorkflowResult={originalWorkflowResult}
+                onPlanUpdate={(updatedResult) => {
+                  // Remap the updated workflow result to EventPlanResult
+                  const mapped = mapWorkflowToEventResult(updatedResult, formData);
+                  setEventResult(mapped);
+                  setOriginalWorkflowResult(updatedResult);
+                  toast({
+                    title: 'Plan Updated',
+                    description: 'Your event plan has been updated based on your request.',
+                  });
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>

@@ -110,29 +110,75 @@ def extract_form_url_from_output(output: str) -> dict:
     Returns:
         Dictionary with form_url, status, and other details
     """
+    if not output:
+        return {
+            "status": "error",
+            "message": "Empty output from form agent",
+            "form_url": ""
+        }
+    
+    # First, try to find any tally.so URL in the output (most reliable)
+    url_patterns = [
+        r'https://tally\.so/r/[a-zA-Z0-9_-]+',  # Standard format
+        r'https://tally\.so/forms/[a-zA-Z0-9_-]+',  # Alternative format
+        r'tally\.so/r/([a-zA-Z0-9_-]+)',  # Without https
+    ]
+    
+    for pattern in url_patterns:
+        url_match = re.search(pattern, output, re.IGNORECASE)
+        if url_match:
+            url = url_match.group(0)
+            if not url.startswith('http'):
+                url = 'https://' + url
+            return {
+                "form_url": url,
+                "status": "success",
+                "message": "Form created successfully"
+            }
+    
+    # Try to extract JSON from the output (multiple strategies)
     try:
-        # Try to extract JSON from the output
-        json_match = re.search(r'\{[^{}]*"form_url"[^{}]*\}', output)
+        # Strategy 1: Look for JSON object with form_url
+        json_match = re.search(r'\{[^{}]*(?:"form_url"[^{}]*)\}', output, re.DOTALL)
         if json_match:
-            json_data = json.loads(json_match.group())
+            json_str = json_match.group(0)
+            json_data = json.loads(json_str)
+            if json_data.get("form_url"):
+                return json_data
+        
+        # Strategy 2: Try to parse the entire output as JSON
+        json_data = json.loads(output.strip())
+        if json_data.get("form_url"):
             return json_data
-        else:
-            # Fallback: look for a tally.so URL
-            url_match = re.search(r'https://tally\.so/r/[a-zA-Z0-9]+', output)
-            if url_match:
-                return {
-                    "form_url": url_match.group(),
-                    "status": "success",
-                    "form_details": "Form created successfully"
-                }
-    except (json.JSONDecodeError, AttributeError):
+        
+        # Strategy 3: Look for nested JSON in code blocks
+        code_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', output, re.DOTALL)
+        if code_block_match:
+            json_data = json.loads(code_block_match.group(1))
+            if json_data.get("form_url"):
+                return json_data
+    except (json.JSONDecodeError, AttributeError, KeyError):
         pass
+    
+    # Check if output contains success indicators but no URL
+    success_indicators = ["created successfully", "form created", "success", "form_url"]
+    has_success = any(indicator.lower() in output.lower() for indicator in success_indicators)
+    
+    if has_success:
+        # Form might have been created but URL extraction failed
+        return {
+            "status": "error",
+            "message": "Form may have been created, but URL could not be extracted from output",
+            "form_url": "",
+            "raw_output": output[:500]  # Limit raw output length
+        }
     
     # Return error if we couldn't extract anything
     return {
         "status": "error",
         "message": "Could not extract form URL from output",
-        "raw_output": output
+        "form_url": "",
+        "raw_output": output[:500]  # Limit raw output length
     }
 
 

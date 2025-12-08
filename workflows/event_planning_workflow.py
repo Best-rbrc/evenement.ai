@@ -578,8 +578,15 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
             # Extract form URL from output; on failure, surface the error instead of generating a local fallback
             form_data = extract_form_url_from_output(form_result.final_output if form_result else "")
 
-            if form_data.get("status") == "success":
-                print(f"✅ Registration form created: {form_data.get('form_url')}\n")
+            # Check if we have a URL (even if status extraction failed)
+            form_url = form_data.get("form_url", "")
+            has_url = bool(form_url and form_url.startswith("http"))
+            
+            if has_url or form_data.get("status") == "success":
+                if has_url:
+                    print(f"✅ Registration form created: {form_url}\n")
+                else:
+                    print(f"✅ Registration form created (URL extraction had issues)\n")
                 # Update form agent status
                 for agent_stat in agent_statuses:
                     if agent_stat["name"] == "form":
@@ -588,9 +595,24 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                                agents=agent_statuses.copy(),
                                current_agent=None,
                                message="Registration form created successfully")
+                # Ensure form_data has the URL
+                if has_url:
+                    form_data["status"] = "success"
+                    form_data["form_url"] = form_url
             else:
-                error_message = form_error or form_data.get("message") or "Unknown error during form creation"
-                print(f"⚠️  Remote form creation failed. Error: {error_message}\n")
+                # Extract error message - check if form_error is actually an error or just a message
+                error_message = form_data.get("message") or "Unknown error during form creation"
+                
+                # Don't show form_error if it's a success message
+                if form_error and "error" in form_error.lower() and "success" not in form_error.lower():
+                    error_message = form_error
+                elif form_error and "created successfully" in form_error.lower():
+                    # The agent said it was created but we couldn't extract the URL
+                    error_message = "Form may have been created, but URL could not be extracted. " + form_data.get("message", "")
+                
+                print(f"⚠️  Form creation failed. Error: {error_message}\n")
+                if form_data.get("raw_output"):
+                    print(f"   Raw output preview: {form_data.get('raw_output')[:200]}...\n")
                 form_data = {
                     "status": "error",
                     "message": error_message,

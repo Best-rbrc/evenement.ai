@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from openai import OpenAI
 
 from workflows.event_planning_workflow import run_event_planning
+from workflows.plan_refinement import refine_event_plan
 
 # Setup server logging
 LOGS_DIR = Path(__file__).parent / "logs"
@@ -108,6 +109,24 @@ class PlanResponse(BaseModel):
     status: str
     event_details: dict
     result: dict
+
+
+class RefinePlanRequest(BaseModel):
+    """Payload for plan refinement requests."""
+    message: str = Field(..., description="User's chat message requesting changes")
+    current_plan: dict = Field(..., description="Current final_plan JSON")
+    specialist_outputs: dict = Field(..., description="Current specialist outputs")
+    event_details: dict = Field(..., description="Original event details")
+    required_agents: list = Field(..., description="List of agents that were originally used")
+
+
+class RefinePlanResponse(BaseModel):
+    """Response from plan refinement."""
+    updated_plan: dict = Field(..., description="Updated final_plan")
+    changed_sections: list = Field(..., description="List of sections that changed")
+    agents_called: list = Field(..., description="List of agents that were called")
+    coordinator_message: str = Field(..., description="Message from coordinator explaining changes")
+    error: Optional[str] = Field(None, description="Error message if refinement failed")
 
 
 def _format_range(min_value: float | int, max_value: float | int, prefix: str = "") -> str:
@@ -368,6 +387,84 @@ async def create_plan(payload: EventRequest) -> PlanResponse:
     server_logger.info("="*80)
     
     return response
+
+
+@app.post("/api/refine-plan", response_model=RefinePlanResponse)
+async def refine_plan(payload: RefinePlanRequest) -> RefinePlanResponse:
+    """Refine an existing event plan based on user chat request.
+    
+    Only calls the necessary agents to make the requested changes,
+    then regenerates the final plan with updates merged in.
+    """
+    global _current_progress
+    
+    server_logger.info("="*80)
+    server_logger.info("💬 /api/refine-plan called")
+    server_logger.info(f"User message: {payload.message}")
+    server_logger.info(f"Changed sections expected: {payload.changed_sections if hasattr(payload, 'changed_sections') else 'N/A'}")
+    print(f"\n💬 /api/refine-plan endpoint called")
+    print(f"   User message: {payload.message}")
+    
+    # Initialize progress tracking
+    _current_progress = {
+        "phase": "refinement",
+        "phase_name": "Refining Plan",
+        "status": "in_progress",
+        "agents": [],
+        "current_agent": None,
+        "message": f"Analyzing your request: {payload.message[:50]}..."
+    }
+    
+    try:
+        # Run refinement in a worker thread with timeout (5 minutes max)
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                refine_event_plan,
+                current_plan=payload.current_plan,
+                specialist_outputs=payload.specialist_outputs,
+                user_message=payload.message,
+                event_details=payload.event_details,
+                required_agents=payload.required_agents
+            ),
+            timeout=300.0  # 5 minutes timeout
+        )
+        
+        # Update progress
+        _current_progress["status"] = "completed"
+        _current_progress["phase"] = "complete"
+        _current_progress["message"] = f"Updated {', '.join(result.get('changed_sections', []))} based on your request"
+        
+        server_logger.info("✅ Refinement completed successfully")
+        server_logger.info(f"   Changed sections: {result.get('changed_sections', [])}")
+        server_logger.info(f"   Agents called: {result.get('agents_called', [])}")
+        print(f"✅ Refinement completed")
+        print(f"   Changed sections: {result.get('changed_sections', [])}")
+        print(f"   Agents called: {result.get('agents_called', [])}")
+        
+        return RefinePlanResponse(
+            updated_plan=result.get("updated_plan", payload.current_plan),
+            changed_sections=result.get("changed_sections", []),
+            agents_called=result.get("agents_called", []),
+            coordinator_message=result.get("coordinator_message", "Plan updated successfully"),
+            error=result.get("error")
+        )
+        
+    except asyncio.TimeoutError:
+        _current_progress["status"] = "error"
+        _current_progress["message"] = "Refinement timed out after 5 minutes"
+        server_logger.error("❌ Refinement timed out")
+        print("\n❌ Refinement timed out after 5 minutes")
+        raise HTTPException(status_code=504, detail="Refinement request timed out. Please try again with a more specific request.")
+    except Exception as exc:
+        _current_progress["status"] = "error"
+        _current_progress["message"] = str(exc)
+        import traceback
+        error_trace = traceback.format_exc()
+        server_logger.error(f"❌ Refinement error: {exc}")
+        server_logger.error(error_trace)
+        print(f"\n❌ Refinement error: {exc}")
+        print(error_trace)
+        raise HTTPException(status_code=500, detail=f"Failed to refine plan: {str(exc)}")
 
 
 if __name__ == "__main__":  # pragma: no cover
