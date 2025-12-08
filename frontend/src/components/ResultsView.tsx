@@ -577,20 +577,18 @@ export function ResultsView({ result, onStartOver, originalWorkflowResult, onPla
         </motion.div>
       </div>
 
-      {/* Chat Panel for Plan Refinement */}
+      {/* Chat Panel for Plan Refinement - Fixed position in bottom right */}
       {originalWorkflowResult && onPlanUpdate && (
-        <motion.div variants={itemVariants} className="mt-8">
-          <ChatPanel
-            currentPlan={result}
-            originalWorkflowResult={originalWorkflowResult}
-            onPlanUpdate={(updatedWorkflowResult) => {
-              // Call the parent's update handler
-              if (onPlanUpdate) {
-                onPlanUpdate(updatedWorkflowResult);
-              }
-            }}
-          />
-        </motion.div>
+        <ChatPanel
+          currentPlan={result}
+          originalWorkflowResult={originalWorkflowResult}
+          onPlanUpdate={(updatedWorkflowResult) => {
+            // Call the parent's update handler
+            if (onPlanUpdate) {
+              onPlanUpdate(updatedWorkflowResult);
+            }
+          }}
+        />
       )}
     </motion.div>
   );

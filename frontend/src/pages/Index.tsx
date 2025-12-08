@@ -114,16 +114,78 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
 
   // Helper function to format prices with $ symbol
   const formatPrice = (value: any): string => {
-    if (!value || value === 'TBD' || value === 'N/A') return value || 'TBD';
-    const str = String(value);
-    // If it already starts with $, return as is
-    if (str.startsWith('$')) return str;
+    if (!value || value === 'TBD' || value === 'N/A' || value === '') return 'TBD';
+    
+    const str = String(value).trim();
+    
+    // If it already starts with $, clean it up and return formatted
+    if (str.startsWith('$')) {
+      // Remove $ and parse
+      const cleaned = str.substring(1).replace(/[^0-9.,-]/g, '');
+      // Handle ranges like "$25,000-$100,000" or "$25,000,100,000" (malformed)
+      if (cleaned.includes('-')) {
+        const parts = cleaned.split('-').map(p => p.replace(/,/g, ''));
+        const nums = parts.map(p => parseFloat(p)).filter(n => !isNaN(n));
+        if (nums.length === 2) {
+          return `$${nums[0].toLocaleString('en-US')} - $${nums[1].toLocaleString('en-US')}`;
+        }
+      }
+      // Handle malformed commas like "$25,000,100,000" -> treat as range if reasonable
+      const parts = cleaned.split(',').filter(p => p.length > 0);
+      if (parts.length > 2) {
+        // Likely malformed, try to extract meaningful numbers
+        const nums = parts.map(p => parseFloat(p.replace(/,/g, ''))).filter(n => !isNaN(n) && n > 0);
+        if (nums.length >= 2) {
+          // Take first and last as range
+          return `$${nums[0].toLocaleString('en-US')} - $${nums[nums.length - 1].toLocaleString('en-US')}`;
+        }
+      }
+      // Single value with $, clean and format
+      const num = parseFloat(cleaned.replace(/,/g, ''));
+      if (!isNaN(num) && num > 0) {
+        return `$${num.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+      }
+      return str; // Return original if parsing fails
+    }
+    
+    // Handle ranges without $ like "25,000-100,000"
+    if (str.includes('-')) {
+      const parts = str.split('-').map(p => p.trim().replace(/[^0-9.,]/g, ''));
+      const nums = parts.map(p => parseFloat(p.replace(/,/g, ''))).filter(n => !isNaN(n));
+      if (nums.length === 2) {
+        return `$${nums[0].toLocaleString('en-US')} - $${nums[1].toLocaleString('en-US')}`;
+      }
+    }
+    
     // If it's a number or numeric string, add $
     const num = parseFloat(str.replace(/[^0-9.-]/g, ''));
-    if (!isNaN(num)) {
+    if (!isNaN(num) && num > 0) {
       // Format with commas for thousands
       return `$${num.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
     }
+    
+    // If it contains text like "per day" or other descriptors, try to extract numbers
+    const numMatch = str.match(/([\d,]+(?:\.\d+)?)/g);
+    if (numMatch && numMatch.length > 0) {
+      const firstNum = parseFloat(numMatch[0].replace(/,/g, ''));
+      if (!isNaN(firstNum) && firstNum > 0) {
+        // Try to preserve context if it's a range or has descriptors
+        if (str.toLowerCase().includes('per day') || str.toLowerCase().includes('per event')) {
+          const rangeMatch = str.match(/([\d,]+(?:\.\d+)?)\s*[-–]\s*\$?([\d,]+(?:\.\d+)?)/i);
+          if (rangeMatch) {
+            const min = parseFloat(rangeMatch[1].replace(/,/g, ''));
+            const max = parseFloat(rangeMatch[2].replace(/,/g, ''));
+            if (!isNaN(min) && !isNaN(max)) {
+              return `$${min.toLocaleString('en-US')} - $${max.toLocaleString('en-US')} per day`;
+            }
+          }
+          return `$${firstNum.toLocaleString('en-US')} per day`;
+        }
+        return `$${firstNum.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+      }
+    }
+    
+    // Return original string if we can't parse it
     return str;
   };
 
