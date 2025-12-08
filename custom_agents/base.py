@@ -16,56 +16,6 @@ from custom_agents.budgeting_agent import create_budgeting_agent
 from custom_agents.scheduling_agent import create_scheduling_agent
 from custom_agents.logo_agent import create_logo_agent
 
-# Optional archived agents - import with fallbacks
-try:
-    from custom_agents.archive.decoration_agent import create_decoration_agent
-except ImportError:
-    create_decoration_agent = None
-
-try:
-    from custom_agents.archive.photography_agent import create_photography_agent
-except ImportError:
-    create_photography_agent = None
-
-try:
-    from custom_agents.archive.music_agent import create_music_agent
-except ImportError:
-    create_music_agent = None
-
-try:
-    from custom_agents.archive.seating_agent import create_seating_agent
-except ImportError:
-    create_seating_agent = None
-
-try:
-    from custom_agents.archive.materials_agent import create_materials_agent
-except ImportError:
-    create_materials_agent = None
-
-try:
-    from custom_agents.archive.networking_agent import create_networking_agent
-except ImportError:
-    create_networking_agent = None
-
-try:
-    from custom_agents.archive.media_agent import create_media_agent
-except ImportError:
-    create_media_agent = None
-
-try:
-    from custom_agents.archive.demo_agent import create_demo_agent
-except ImportError:
-    create_demo_agent = None
-
-try:
-    from custom_agents.archive.sponsor_agent import create_sponsors_agent
-except ImportError:
-    create_sponsors_agent = None
-
-try:
-    from custom_agents.archive.accomodation_agent import create_accommodation_agent
-except ImportError:
-    create_accommodation_agent = None
 
 # Agent creation mapping
 AGENT_CREATORS = {
@@ -83,27 +33,6 @@ AGENT_CREATORS = {
     "logo": create_logo_agent,
 }
 
-# Add optional archived agents only if they were successfully imported
-if create_decoration_agent:
-    AGENT_CREATORS["decoration"] = create_decoration_agent
-if create_photography_agent:
-    AGENT_CREATORS["photography"] = create_photography_agent
-if create_music_agent:
-    AGENT_CREATORS["music"] = create_music_agent
-if create_seating_agent:
-    AGENT_CREATORS["seating"] = create_seating_agent
-if create_materials_agent:
-    AGENT_CREATORS["materials"] = create_materials_agent
-if create_networking_agent:
-    AGENT_CREATORS["networking"] = create_networking_agent
-if create_media_agent:
-    AGENT_CREATORS["media"] = create_media_agent
-if create_demo_agent:
-    AGENT_CREATORS["demo"] = create_demo_agent
-if create_sponsors_agent:
-    AGENT_CREATORS["sponsors"] = create_sponsors_agent
-if create_accommodation_agent:
-    AGENT_CREATORS["accommodation"] = create_accommodation_agent
 
 
 def create_specialized_agents(required_agents: List[str], mcp_servers=None) -> Dict[str, Agent]:
