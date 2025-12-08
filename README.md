@@ -16,6 +16,7 @@ pip install https://github.com/Adrien-Z/AI-Event-Planner-Agent/releases/download
 
 **Optional:**
 - **Tally API key** - Get at: https://tally.so/help/api (only for form generation)
+- **Twilio credentials** - Get at: https://www.twilio.com/console (only for SMS notifications)
 
 ## Usage
 
@@ -72,6 +73,10 @@ Set via environment variables:
 | `OPENAI_API_KEY` | Yes | - | - |
 | `TALLY_API_KEY` | No | - | - |
 | `PLAN_EVENT_FORM_MODE` | No | `skip`, `unsandboxed`, `sandboxed` | `skip` |
+| `TWILIO_ACCOUNT_SID` | No | - | - |
+| `TWILIO_AUTH_TOKEN` | No | - | - |
+| `TWILIO_FROM_PHONE` | No | - | - |
+| `TWILIO_TO_PHONE` | No | - | - |
 
 ## Development Setup
 
