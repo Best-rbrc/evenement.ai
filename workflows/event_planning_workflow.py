@@ -19,6 +19,28 @@ import os
 import logging
 from pathlib import Path
 
+# Import from extracted modules
+from workflows.schemas import AGENT_SCHEMAS, validate_agent_output
+from workflows.prompts import (
+    build_planning_prompt,
+    build_specialist_prompt,
+    build_finalization_prompt,
+    build_calendar_prompt,
+    build_form_prompt,
+    build_logo_prompt,
+)
+from workflows.mcp_setup import (
+    setup_sandboxed_local_tally_mcp,
+    setup_unsandboxed_tally_mcp,
+    setup_sandboxed_filesystem_mcp,
+)
+from workflows.workflow_utils import (
+    get_current_date_context,
+    copy_sandbox_files_to_project,
+    create_basic_schedule,
+    run_sync_with_backoff,
+)
+
 # Allow longer agent exchanges (default 10 can be too short for tool-rich agents)
 AGENT_MAX_TURNS = 20
 
@@ -51,397 +73,8 @@ def setup_workflow_logger():
     logger.addHandler(fh)
     return logger, log_file
 
-# Canonical JSON schemas - agents MUST return outputs matching these exact structures
-AGENT_SCHEMAS = {
-    "planning": {
-        "analysis": "string",
-        "required_agents": ["venue", "catering", "programme", "speakers", "communication", "activities", "entertainment", "budgeting", "scheduling", "calendar", "form", "logo"],
-        "execution_order_rationale": "string",
-        "special_considerations": ["string"],
-    },
-    "budgeting": {
-        "budget_allocation_recommended": {"category": {"recommended_spend": "number", "pct_of_total": "number", "notes": "string"}},
-        "major_category_breakdowns": {"category": {"recommended_spend": "number", "pct_of_total": "number", "key_assumptions": ["string"]}},
-        "what_if_scenarios": [{"name": "string", "delta": "string", "impact": "string", "recommendation": "string"}],
-        "scenario_recommendation": {"name": "string", "reason": "string"},
-        "allocation_rationale": "string",
-        "warnings": ["string"],
-    },
-    "venue": {
-        "summary": "string",
-        "venues": [{"name": "string", "location": "string", "capacity": "number", "estimated_cost": "string|number", "amenities": ["string"], "availability_notes": "string", "website": "string", "backup_alternatives": ["string"]}],
-        "timeline_and_logistics": ["string"],
-        "top_recommendation": {"option": "string", "rationale": "string", "dependencies": ["string"]},
-    },
-    "catering": {
-        "summary": "string",
-        "menu_overview": ["string"],
-        "dietary_accommodations": ["string"],
-        "budget_estimate": {"per_person": "number", "total": "number", "notes": "string"},
-        "timeline_and_logistics": ["string"],
-    },
-    "programme": {
-        "summary": "string",
-        "programme_recommendations": {
-            "options": [{"name": "string", "description": "string", "capacity": "string|number", "cost": "string|number", "amenities": ["string"], "dependencies": ["string"]}],
-            "timeline_and_logistics": ["string"],
-            "session_and_flow": {"key": "time-range-or-note"},
-            "breaks_networking": ["string"],
-            "technical_and_materials_requirements": ["string"],
-            "contingency_plans": ["string"],
-            "top_recommendation": {"option": "string", "rationale": "string", "dependencies": "string"},
-            "backup_option": {"option": "string", "rationale": "string"},
-        },
-        "next_steps": ["string"],
-    },
-    "speakers": {
-        "summary": "string",
-        "speakers_recommendations": {
-            "primary_objectives": ["string"],
-            "top_speaker_options": [{"name": "string", "bio": "string", "estimated_fee": "string|number", "ideal_role": "string", "logistics": "string", "rationale": "string"}],
-            "honorarium_budget_itemization": {"item": "string|number"},
-            "timeline_logistics": ["string"],
-            "technical_dependencies": ["string"],
-            "other_dependencies": ["string"],
-            "backup_plan": {"virtual_alternative": "string", "local_rising_star": "string"},
-        },
-        "recommendation_rationale": "string",
-    },
-    "activities": {
-        "activity_planning": {
-            "summary": "string",
-            "recommendations": [{"name": "string", "description": "string", "duration": "string|number", "cost_estimate": "string|number", "notes": "string"}],
-            "logistics": ["string"],
-            "budget_estimate": {"total": "number", "breakdown": {"item": "number"}},
-        }
-    },
-    "entertainment": {
-        "entertainment_recommendations": {
-            "summary": "string",
-            "specific_options": [{"name": "string", "description": "string", "cost_estimate": "number", "vendor_notes": "string"}],
-            "budget_estimate": {"total": "number", "breakdown": {"item": "number"}},
-            "recommended_package": {"option": "string", "components": ["string"], "rationale": ["string"]},
-            "timeline_and_logistics": ["string"],
-            "technical_requirements": ["string"],
-            "backup_entertainment_plans": [{"scenario": "string", "plan": "string"}],
-            "dependencies_on_other_areas": ["string"],
-            "top_recommendations_and_rationale": {
-                "recommendation_1": {"choice": "string", "reason": "string"},
-                "recommendation_2": {"choice": "string", "reason": "string"},
-            },
-        }
-    },
-    "communication": {
-        "communication_recommendations": {
-            "overview": "string",
-            "channels": ["string"],
-            "key_messages": ["string"],
-            "timeline": ["string"],
-            "budget_overview": {"total": "number", "breakdown": {"channel": "number"}},
-        }
-    },
-    "scheduling": {
-        "status": "optimal|feasible|infeasible",
-        "optimized_schedule": [{"session_id": "number", "name": "string", "start_time": "HH:MM", "end_time": "HH:MM", "duration": "number", "room": "string", "capacity": "number", "speaker": "string", "expected_attendees": "number"}],
-        "metrics": {"total_duration": "number", "event_ends_at": "HH:MM", "room_utilization": {"room": "pct"}, "conflicts_resolved": "string"},
-        "conflicts_explained": ["string"],
-        "actionable_suggestions": ["string"],
-        "next_steps": ["string"],
-    },
-    "calendar": {
-        "calendar_file_path": "string",
-        "event_summary": "string",
-        "timing_details": "string",
-        "import_instructions": "string",
-    },
-    "form": {
-        "form_url": "string",
-        "status": "success|error",
-        "message": "string|null",
-    },
-    "logo": {
-        "status": "success|error",
-        "logo_file_path": "string",
-        "logo_url": "string",
-        "design_rationale": "string",
-        "color_palette": "string",
-        "typography_suggestions": "string",
-        "usage_guidelines": ["string"],
-        "branding_recommendations": ["string"],
-    },
-    "final_plan": {
-        "executive_summary": "string",
-        "timeline": [{"phase": "string", "tasks": ["string"], "deadline": "YYYY-MM-DD"}],
-        "schedule": {
-            "optimized": "boolean",
-            "sessions": [{"session_id": "number", "name": "string", "start_time": "HH:MM", "end_time": "HH:MM", "duration": "number", "room": "string", "capacity": "number", "speaker": "string", "expected_attendees": "number"}],
-            "metrics": {"total_duration": "string|number", "event_ends_at": "HH:MM", "room_utilization": {"room": "pct"}, "conflicts_resolved": "string"},
-            "status": "optimal|feasible|infeasible",
-        },
-        "budget": {"total_available": "number", "total_allocated": "number", "by_category": {"category": "number"}, "status": "within_budget|over_budget|at_limit"},
-        "recommendations": {"venue": {}, "catering": {}, "programme": {}, "speakers": {}, "communication": {}, "activities": {}, "entertainment": {}, "budgeting": {}, "scheduling": {}},
-        "risks": [{"risk": "string", "severity": "high|medium|low", "mitigation": "string"}],
-        "action_items": [{"action": "string", "owner": "string", "deadline": "string", "priority": "high|medium|low"}],
-        "assumptions": ["string"],
-    },
-}
 
 
-def validate_agent_output(agent_name: str, output: Any) -> Dict[str, Any]:
-    """Validate and normalize agent output to match canonical schema.
-    
-    Args:
-        agent_name: The agent identifier (e.g., 'venue', 'budgeting', 'final_plan')
-        output: Raw output from the agent (string or dict)
-    
-    Returns:
-        Validated dict matching the canonical schema
-    
-    Raises:
-        ValueError: If output cannot be parsed or validated
-    """
-    # Parse if string - try multiple extraction methods
-    if isinstance(output, str):
-        output_str = output.strip()
-        
-        # Try direct JSON parse first
-        try:
-            parsed = json.loads(output_str)
-            output = parsed
-        except json.JSONDecodeError:
-            # Try extracting JSON from markdown code blocks
-            try:
-                # Try ```json ... ``` blocks
-                if '```json' in output_str:
-                    json_str = output_str.split('```json')[1].split('```')[0].strip()
-                elif '```' in output_str:
-                    json_str = output_str.split('```')[1].split('```')[0].strip()
-                else:
-                    # Try to find JSON object {...}
-                    import re
-                    match = re.search(r'\{.*\}', output_str, re.DOTALL)
-                    if not match:
-                        raise ValueError(f"No JSON object found in output")
-                    json_str = match.group(0)
-                
-                parsed = json.loads(json_str)
-                output = parsed
-            except (json.JSONDecodeError, IndexError, ValueError) as e:
-                raise ValueError(f"Agent '{agent_name}' returned invalid JSON: {e}")
-    
-    if not isinstance(output, dict):
-        raise ValueError(f"Agent '{agent_name}' must return a dict, got {type(output)}")
-    
-    schema = AGENT_SCHEMAS.get(agent_name)
-    if not schema:
-        # If no schema defined, return as-is (for backward compatibility)
-        return output
-    
-    # Ensure all required top-level keys exist
-    missing_keys = [key for key in schema.keys() if key not in output]
-    if missing_keys:
-        raise ValueError(f"Agent '{agent_name}' missing required keys: {', '.join(missing_keys)}")
-    
-    return output
-
-
-def get_current_date_context() -> str:
-    """Get current date context for agents."""
-    current_date = datetime.datetime.now()
-    return f"Today's date: {current_date.strftime('%B %d, %Y')} ({current_date.strftime('%Y-%m-%d')})"
-
-
-async def setup_sandboxed_local_tally_mcp():
-    """Setup sandboxed LOCAL Tally MCP server (custom Python implementation).
-    
-    This uses our custom tally_mcp_server.py that wraps the Tally REST API.
-    Runs in Docker sandbox with network egress to api.tally.so.
-    
-    Returns:
-        Sandboxed custom Tally MCP server
-    """
-    from mcp_sandbox_openai_sdk import (
-        DevMCPManifest,
-        DomainPort,
-        Permission,
-        SandboxedMCPStdio,
-    )
-    
-    # Custom local Tally MCP server (same setup as test_form_mcp.py)
-    custom_mcp_dir = Path(__file__).parent.parent / "custom_mcp_servers"
-    tally_api_key = os.getenv('TALLY_API_KEY', '')
-    
-    tally_manifest = DevMCPManifest(
-        name="Tally Form Server",
-        description="Custom sandboxed Tally MCP server with network access to api.tally.so",
-        registry="pypi",
-        package_name="tally-mcp-server",  # Not used for DevMCPManifest
-        permissions=[Permission.MCP_AC_NETWORK_CLIENT],
-        code_mount=str(custom_mcp_dir),
-        exec_command="python3 /sandbox/tally_mcp_server.py",
-    )
-    
-    tally_server = SandboxedMCPStdio(
-        manifest=tally_manifest,
-        runtime_args=[],
-        runtime_permissions=[DomainPort("api.tally.so", 443)],
-        static_environment_vars={"TALLY_API_KEY": tally_api_key},
-    )
-    
-    await tally_server.__aenter__()
-    return tally_server
-
-
-async def setup_unsandboxed_tally_mcp():
-    """Setup UNSANDBOXED Tally mcp-remote server (official Tally MCP).
-    
-    This uses Tally's official mcp-remote package without sandboxing.
-    Connects directly to api.tally.so with OAuth2 authentication.
-    
-    Returns:
-        Unsandboxed Tally MCP client
-    """
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
-    
-    tally_api_key = os.getenv('TALLY_API_KEY', '')
-    
-    server_params = StdioServerParameters(
-        command="npx",
-        args=[
-            "mcp-remote",
-            "https://api.tally.so/mcp",
-            "--header",
-            f"Authorization: Bearer {tally_api_key}",
-        ],
-    )
-    
-    stdio_transport = await stdio_client(server_params).__aenter__()
-    session = ClientSession(stdio_transport[0], stdio_transport[1])
-    await session.__aenter__()
-    
-    return session
-
-
-async def setup_sandboxed_filesystem_mcp():
-    """Setup sandboxed MCP server for calendar file operations.
-    
-    Creates filesystem server for ICS calendar file writes in sandbox.
-    
-    Returns:
-        Sandboxed filesystem MCP server
-    """
-    from mcp_sandbox_openai_sdk import (
-        FSAccess,
-        MCPManifest,
-        Permission,
-        SandboxedMCPStdio,
-    )
-    
-    SANDBOX_DIR.mkdir(parents=True, exist_ok=True)
-    PROJECT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # Filesystem server manifest
-    fs_manifest = MCPManifest(
-        name="Filesystem Server",
-        description="Sandbox-restricted file server for event outputs (ICS calendar files)",
-        registry="npm",
-        package_name="@modelcontextprotocol/server-filesystem",
-        permissions=[
-            Permission.MCP_AC_FILESYSTEM_READ,
-            Permission.MCP_AC_FILESYSTEM_WRITE,
-            Permission.MCP_AC_FILESYSTEM_DELETE,
-        ],
-    )
-    
-    # Create sandboxed filesystem server
-    fs_server = SandboxedMCPStdio(
-        manifest=fs_manifest,
-        runtime_args=[str(SANDBOX_DIR)],
-        runtime_permissions=[
-            FSAccess(str(SANDBOX_DIR), read=True, write=True),
-        ],
-    )
-    
-    # Enter the async context but DON'T exit it
-    # The context must stay alive for the duration of the workflow
-    await fs_server.__aenter__()
-    
-    # Return both the server and a cleanup function
-    return fs_server
-
-
-def copy_sandbox_files_to_project():
-    """Copy files from sandbox temp directory to project directory."""
-    if not SANDBOX_DIR.exists():
-        return
-    
-    copied_count = 0
-    for file in SANDBOX_DIR.glob("*"):
-        if file.is_file():
-            dest = PROJECT_OUTPUT_DIR / file.name
-            shutil.copy2(file, dest)
-            copied_count += 1
-    
-    if copied_count > 0:
-        print(f"✅ Copied {copied_count} file(s) from sandbox to {PROJECT_OUTPUT_DIR}")
-
-
-def _create_basic_schedule(event_details: Dict[str, Any]) -> Dict[str, Any]:
-    """Create a basic schedule from event details when no schedule is provided by agents."""
-    event_name = event_details.get('event_name', 'Event')
-    event_date = event_details.get('event_date', '')
-    time_window = event_details.get('time_window', '09:00 - 17:00')
-    guest_count = event_details.get('guest_count', 'TBD')
-    
-    # Parse time window
-    start_time = '09:00'
-    end_time = '17:00'
-    if ' - ' in time_window:
-        times = time_window.split(' - ')
-        if len(times) == 2:
-            start_time = times[0].strip()
-            end_time = times[1].strip()
-    
-    # Parse event dates for multi-day events
-    event_dates = []
-    if event_date:
-        if ' to ' in event_date:
-            event_dates = [d.strip() for d in event_date.split(' to ')]
-        else:
-            event_dates = [event_date]
-    
-    # Create basic sessions
-    sessions = []
-    
-    # For single-day events, create one main session
-    if len(event_dates) <= 1:
-        date = event_dates[0] if event_dates else event_date
-        sessions.append({
-            "session_id": 1,
-            "name": event_name,
-            "start_time": start_time,
-            "end_time": end_time,
-            "duration": 480,  # 8 hours default
-            "date": date if date else None
-        })
-    else:
-        # For multi-day events, create one session per day
-        for idx, date in enumerate(event_dates):
-            sessions.append({
-                "session_id": idx + 1,
-                "name": f"{event_name} - Day {idx + 1}",
-                "start_time": start_time,
-                "end_time": end_time,
-                "duration": 480,
-                "date": date
-            })
-    
-    return {
-        "optimized": False,
-        "sessions": sessions,
-        "status": "basic"
-    }
 
 
 def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -592,7 +225,8 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     if USE_SANDBOXED_FORMS:
         try:
             print("🔒 Setting up sandboxed local Tally MCP server...\n")
-            tally_server = loop.run_until_complete(setup_sandboxed_local_tally_mcp())
+            custom_mcp_dir = Path(__file__).parent.parent / "custom_mcp_servers"
+            tally_server = loop.run_until_complete(setup_sandboxed_local_tally_mcp(custom_mcp_dir))
             _tally_server_ref = tally_server  # Keep global reference to prevent GC
             print("✅ Custom Tally MCP initialized - forms will be sandboxed\n")
         except Exception as e:
@@ -628,86 +262,8 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     # Create coordinator with handoffs to all specialists
     coordinator = create_coordinator_agent(event_details, all_agent_types, all_specialists)
 
-    planning_prompt = f"""You are the Event Planning Coordinator analyzing requirements for "{event_details['event_name']}".
-
-{get_current_date_context()}
-
-Event Details:
-{json.dumps(event_details, indent=2)}
-
-Your task for PHASE 1 - STRATEGIC PLANNING:
-
-1. Analyze the event type, budget, guest count, and special requirements
-2. Decide which specialist agents are needed for this event
-3. Determine the optimal ORDER to call them (e.g., venue first, then catering based on venue kitchen)
-4. Identify any special considerations or constraints
-
-Available specialists:
-- venue: Physical location selection and logistics
-- catering: Food, beverages, and dining service
-- programme: Event schedule and session planning
-- speakers: Speaker/presenter coordination
-- communication: Marketing, invitations, attendee communications
-- activities: Team-building and recreational activities
-- entertainment: Entertainment and performance coordination
-- budgeting: Budget allocation, what-if scenarios, cost validation
-- scheduling: Advanced constraint-based schedule optimization (resolves conflicts, optimizes room/speaker assignments)
-- calendar: Calendar invites and ICS file generation
-- form: Online registration/RSVP form creation (auto-generated in Phase 4)
-
-Output your plan as JSON:
-{{
-  "analysis": "Brief analysis of event needs",
-  "required_agents": ["agent1", "agent2", ...],  // In optimal execution order
-  "execution_order_rationale": "Why this order makes sense",
-  "special_considerations": ["consideration1", "consideration2", ...]
-}}
-
-IMPORTANT GUIDELINES:
-- ALWAYS include "budgeting" agent early in the sequence (typically after venue/catering needs are identified)
-- Budgeting should run BEFORE cost-heavy agents provide estimates (so they have allocation targets)
-- OR budgeting can run AFTER specialists to validate and create what-if scenarios
-
-- WHEN TO USE "scheduling" agent (CRITICAL):
-  * USE for: conferences, workshops, summits, multi-day events, academic events
-  * USE when: Multiple sessions, speakers, or parallel tracks need coordination
-  * USE when: Multiple rooms/venues need to be scheduled without conflicts
-  * SKIP for: Simple single-session events (weddings, birthday parties, single galas)
-  * SKIP for: Events with one linear timeline (no room/speaker conflicts possible)
-  * PLACEMENT: AFTER programme, speakers, and venue agents (needs their output as input)
-  * BEFORE calendar agent (provides optimized times for calendar generation)
-
-- Be strategic and selective - don't include agents that aren't truly needed for this event type."""
-
-    # Run coordinator planning with rate-limit aware retries
-    # Event loop is already set up at function start
-    def _run_sync_with_backoff(agent, prompt, max_retries: int = 3):
-        import time, re, random
-        last_exc = None
-        for attempt in range(max_retries):
-            try:
-                return Runner.run_sync(agent, prompt, max_turns=AGENT_MAX_TURNS)
-            except Exception as e:
-                last_exc = e
-                msg = str(e)
-                if "rate_limit_exceeded" in msg or "Please try again in" in msg:
-                    # Parse suggested wait, else exponential backoff
-                    wait_time = 2 ** attempt
-                    m = re.search(r"Please try again in\s+([0-9]+\.?[0-9]*)s", msg)
-                    if m:
-                        try:
-                            wait_time = float(m.group(1))
-                        except Exception:
-                            pass
-                    wait_time += random.uniform(0.3, 0.7)
-                    print(f"⏳ Rate limit. Waiting {wait_time:.2f}s before retry...\n")
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    break
-        raise last_exc
-
-    planning_result = _run_sync_with_backoff(coordinator, planning_prompt)
+    planning_prompt = build_planning_prompt(event_details)
+    planning_result = run_sync_with_backoff(coordinator, planning_prompt, max_turns=AGENT_MAX_TURNS)
     
     # Parse the planning decision
     try:
@@ -762,80 +318,13 @@ IMPORTANT GUIDELINES:
         if specialist_outputs:
             context = f"\n\nPrevious specialist outputs for context:\n{json.dumps(specialist_outputs, indent=2)}"
         
-        # Special handling for budgeting agent
-        if agent_name == "budgeting":
-            specialist_prompt = f"""You are the Budgeting specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
-
-{get_current_date_context()}
-
-Event Details:
-{json.dumps(event_details, indent=2)}{context}
-
-Your task:
-{"INITIAL BUDGET ALLOCATION:" if not specialist_outputs else "BUDGET VALIDATION AND WHAT-IF SCENARIOS:"}
-
-{"1. Create baseline budget allocation across all required categories using calculate_budget_allocation()" if not specialist_outputs else "1. Review all specialist cost estimates"}
-{"2. Set priorities based on event type (e.g., venue and catering typically high priority)" if not specialist_outputs else "2. Validate each category cost using validate_category_costs()"}
-{"3. Ensure 10-15% contingency fund" if not specialist_outputs else "3. Check if total costs fit within available budget"}
-{"4. Provide per-category allocations with rationale" if not specialist_outputs else "4. If over budget, run 2-3 what-if scenarios using run_budget_scenario() to find solutions"}
-{"" if not specialist_outputs else "5. Use compare_budget_scenarios() to recommend best approach"}
-{"" if not specialist_outputs else "6. Provide itemized breakdown using generate_cost_breakdown() for major categories"}
-
-Required categories for this event: {', '.join([a for a in required_agents if a != 'budgeting' and a not in ['calendar', 'form', 'scheduling']])}
-
-Output comprehensive JSON with budget allocation, scenarios (if applicable), and recommendations."""
-        elif agent_name == "scheduling":
-            # Special handling for scheduling agent
-            specialist_prompt = f"""You are the Advanced Scheduling specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
-
-{get_current_date_context()}
-
-Event Details:
-{json.dumps(event_details, indent=2)}{context}
-
-Your task:
-1. Extract all sessions/activities from programme and speakers outputs
-2. Identify available rooms from venue output
-3. Determine speaker availability and travel time requirements
-4. Define constraints (event hours, lunch breaks, capacity requirements)
-5. Use optimize_schedule() to create optimal schedule that:
-   - Avoids all conflicts (rooms, speakers, capacity)
-   - Respects break times
-   - Minimizes total duration
-   - Maximizes room utilization
-
-Input format for optimize_schedule:
-- sessions: [{{"id": 1, "name": "Session Name", "duration": 60, "speaker": "Speaker Name", "expected_attendees": 100}}]
-- rooms: [{{"id": 1, "name": "Room Name", "capacity": 150, "equipment": ["projector"]}}]
-- speakers: [{{"id": "Speaker Name", "travel_time_minutes": 30}}]
-- constraints: {{"event_start": "09:00", "event_end": "18:00", "lunch_break": "12:00-13:00"}}
-
-If scheduling is infeasible, explain conflicts and provide actionable suggestions.
-
-Output comprehensive JSON with optimized schedule, metrics, and any conflict resolutions."""
-        else:
-            # Add budget context if budgeting agent has run
-            budget_context = ""
-            if "budgeting" in specialist_outputs:
-                budget_context = f"\n\nBUDGET CONSTRAINTS from Budgeting Specialist:\n{specialist_outputs['budgeting']}\n\nPlease ensure your recommendations fit within your allocated budget."
-            
-            specialist_prompt = f"""You are the {agent_name} specialist for "{event_details['event_name']}", a {event_details['event_type']} event.
-
-{get_current_date_context()}
-
-Event Details:
-{json.dumps(event_details, indent=2)}{context}{budget_context}
-
-Your task:
-Provide detailed, actionable recommendations for {agent_name}, including:
-- Specific options with names and costs where applicable
-- Timeline and logistics considerations
-- Budget estimates (itemized)
-- Top recommendations with rationale
-- Any dependencies on other areas
-
-Output structured JSON with your recommendations."""
-
+        specialist_prompt = build_specialist_prompt(
+            agent_name=agent_name,
+            event_details=event_details,
+            context=context,
+            specialist_outputs=specialist_outputs,
+            required_agents=required_agents
+        )
         result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
         
         # Log raw agent output for debugging
@@ -878,112 +367,12 @@ Output structured JSON with your recommendations."""
     
     print("Coordinator reviewing all outputs...\n")
 
-    finalization_prompt = f"""You are the Event Planning Coordinator finalizing the plan for "{event_details['event_name']}".
-
-{get_current_date_context()}
-
-You have received outputs from these specialists: {', '.join(required_agents)}
-
-Event Details:
-{json.dumps(event_details, indent=2)}
-
-All Specialist Outputs:
-{json.dumps(specialist_outputs, indent=2)}
-
-Your task for PHASE 3 - FINALIZATION:
-
-1. REVIEW all specialist outputs for:
-   - Budget conflicts (total cost vs available budget) - IF BUDGETING AGENT RAN: Check their scenario analysis
-   - Logical inconsistencies (e.g., venue capacity vs guest count)
-   - Missing critical information
-   - Interdependencies and conflicts
-
-2. BUDGET VALIDATION (CRITICAL):
-   - IF budgeting agent was NOT used yet: Handoff to budgeting agent NOW to validate all costs
-   - IF budgeting agent shows over_budget scenarios: Consider their recommended scenario
-   - Ensure final plan reflects budgeting agent's approved allocation
-
-2.5. SCHEDULING OPTIMIZATION REVIEW (IF SCHEDULING AGENT WAS USED):
-   - Extract and preserve scheduling metrics (total_duration, room_utilization, conflicts_resolved)
-   - Include optimized schedule in final plan under "schedule" section
-   - For multi-day events: Add "date": "YYYY-MM-DD" to each session based on event_date range
-   - Highlight any scheduling conflicts that were resolved
-   - If scheduling was infeasible, document the conflicts and suggestions
-
-3. IF YOU IDENTIFY OTHER ISSUES OR GAPS:
-   - You can handoff to ANY specialist agent (even ones not called yet) to:
-     * Refine their recommendations with adjusted constraints
-     * Fill in missing information
-     * Resolve conflicts with other areas
-   - Example: "Venue costs exceed budget - handoff to venue agent with reduced budget"
-   - Example: "We need decoration planning - handoff to decoration agent"
-
-3. SYNTHESIZE the final comprehensive event plan including:
-   - Executive summary (2-3 paragraphs)
-   - Complete event timeline (with all areas integrated)
-   - **EVENT SCHEDULE (MANDATORY)**: ALWAYS include a schedule section with sessions/timeline
-     * If scheduling agent was used: Use their optimized schedule
-     * If programme agent provided schedule: Use their daily_schedule or session_and_flow
-     * If neither exists: Create a basic schedule based on event details (start time, duration, breaks)
-     * For multi-day events: Include date for each session
-     * Minimum: At least one session with start_time, end_time, and name
-   - Detailed budget breakdown by category with totals
-   - All specialist recommendations (organized and refined)
-   - Risk assessment with mitigation strategies
-   - Prioritized action items with deadlines
-   - Assumptions made
-
-4. OUTPUT as valid JSON:
-{{
-  "executive_summary": "...",
-  "timeline": [
-    {{"phase": "Phase name (e.g., 'Pre-Event Planning', 'Event Execution', 'Post-Event')", "tasks": ["Task 1", "Task 2", ...], "deadline": "YYYY-MM-DD"}}
-  ],
-  "schedule": {{
-    "optimized": true/false,  // true if scheduling agent was used, false otherwise
-    "sessions": [  // REQUIRED - ALWAYS include at least one session. For multi-day events, include "date": "YYYY-MM-DD" for each session
-      {{
-        "session_id": 1,
-        "name": "string",  // e.g., "Welcome & Opening", "Main Event", "Closing"
-        "start_time": "HH:MM",  // REQUIRED
-        "end_time": "HH:MM",  // REQUIRED
-        "duration": number,  // in minutes
-        "room": "string",  // optional
-        "speaker": "string",  // optional
-        "date": "YYYY-MM-DD"  // REQUIRED for multi-day events
-      }}
-    ],
-    "metrics": {{  // Optional if scheduling agent was not used
-      "total_duration": "...",
-      "event_ends_at": "...",
-      "room_utilization": {{}},
-      "conflicts_resolved": "..."
-    }},
-    "status": "optimal | feasible | infeasible | basic"  // "basic" if created from event details without optimization
-  }},
-  "budget": {{
-    "total_available": "...",
-    "total_allocated": "...",
-    "by_category": {{}},
-    "status": "within_budget | over_budget | at_limit"
-  }},
-  "recommendations": {{
-    "venue": {{}},
-    "catering": {{}},
-    ...
-  }},
-  "risks": [
-    {{"risk": "...", "severity": "high|medium|low", "mitigation": "..."}}
-  ],
-  "action_items": [
-    {{"action": "...", "owner": "...", "deadline": "...", "priority": "high|medium|low"}}
-  ],
-  "assumptions": [...]
-}}
-
-Use handoffs if needed to refine or add information. Then provide your final synthesized plan."""
-
-    final_result = _run_sync_with_backoff(coordinator, finalization_prompt)
+    finalization_prompt = build_finalization_prompt(
+        event_details=event_details,
+        required_agents=required_agents,
+        specialist_outputs=specialist_outputs
+    )
+    final_result = run_sync_with_backoff(coordinator, finalization_prompt, max_turns=AGENT_MAX_TURNS)
     
     print("✅ Finalization complete!\n")
     
@@ -1019,7 +408,7 @@ Use handoffs if needed to refine or add information. Then provide your final syn
             # Create fresh event loop for MCP setup (matches test pattern)
             mcp_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(mcp_loop)
-            fs_server = mcp_loop.run_until_complete(setup_sandboxed_filesystem_mcp())
+            fs_server = mcp_loop.run_until_complete(setup_sandboxed_filesystem_mcp(SANDBOX_DIR, PROJECT_OUTPUT_DIR))
             _fs_server_ref = fs_server  # Keep global reference to prevent GC
             # Don't close the loop - keep it alive for calendar agent
             loop = mcp_loop  # Update loop reference to use the same one
@@ -1065,43 +454,11 @@ Use handoffs if needed to refine or add information. Then provide your final syn
                    current_agent="calendar",
                    message="Generating calendar file...")
     
-    calendar_prompt = f"""You are the Calendar Specialist for "{event_details['event_name']}".
-
-{get_current_date_context()}
-
-Event Details:
-{json.dumps(event_details, indent=2)}
-
-All Planning Outputs:
-{json.dumps(specialist_outputs, indent=2)}
-
-Final Plan:
-{final_result.final_output}
-
-Your task:
-Create a comprehensive calendar invite (.ics file) for this event including:
-
-1. **Extract Key Information:**
-   - Event name, date, and location
-   - Determine appropriate start and end times based on event type and outputs
-   - Create rich description from planning details
-
-2. **Generate Calendar File:**
-   - Use the generate_ics_file tool to create the .ics file
-   - Include venue information from venue specialist
-   - Add timing from programme specialist if available
-   - Set appropriate reminders and notifications
-
-3. **Provide File Details:**
-   - Confirm successful file creation
-   - Provide file path for user access
-   - Include instructions for importing to calendar apps
-
-Output JSON with:
-- calendar_file_path
-- event_summary
-- timing_details
-- import_instructions"""
+    calendar_prompt = build_calendar_prompt(
+        event_details=event_details,
+        specialist_outputs=specialist_outputs,
+        final_result_output=final_result.final_output
+    )
 
     calendar_result = None
     try:
@@ -1205,11 +562,10 @@ Output JSON with:
         if "programme" in specialist_outputs:
             minimal_context["programme"] = "optional session preferences"
 
-        form_prompt = (
-            f"Create an RSVP/registration form for '{event_details.get('event_name')}'.\n\n"
-            f"Essentials: {json.dumps(concise_event, indent=2)}\n\n"
-            f"Guidelines: {json.dumps(minimal_context, indent=2)}\n\n"
-            "Return ONLY valid JSON with: {\"form_url\": \"https://tally.so/r/xxxxx\", \"status\": \"success\"}."
+        form_prompt = build_form_prompt(
+            event_details=event_details,
+            concise_event=concise_event,
+            minimal_context=minimal_context
         )
 
         # Create the form via shared helper (handles retries/backoff)
@@ -1302,49 +658,11 @@ Output JSON with:
     
     print("Creating event logo...\n")
     
-    logo_prompt = f"""You are the Logo Design Specialist for "{event_details['event_name']}".
-
-{get_current_date_context()}
-
-Event Details:
-{json.dumps(event_details, indent=2)}
-
-All Planning Outputs:
-{json.dumps(specialist_outputs, indent=2)}
-
-Final Plan:
-{final_result.final_output}
-
-Your task:
-Generate a professional logo for this event using the generate_logo_image() function.
-
-1. Extract event information:
-   - Event name: {event_details.get('event_name')}
-   - Event type: {event_details.get('event_type')}
-   - Event description: {event_details.get('event_description', '')}
-   - Style preferences: Consider the event type and target audience
-
-2. Generate the logo:
-   - Use generate_logo_image() with appropriate parameters
-   - Ensure the logo has a transparent background
-   - Create a design that represents the event's purpose and style
-
-3. Provide design information:
-   - Design rationale
-   - Color palette
-   - Typography suggestions
-   - Usage guidelines
-   - Branding recommendations
-
-Output JSON with:
-- status: "success" or "error"
-- logo_file_path: path to the generated logo file
-- logo_url: file URL
-- design_rationale: explanation of design choices
-- color_palette: color information
-- typography_suggestions: font recommendations
-- usage_guidelines: array of usage instructions
-- branding_recommendations: array of branding tips"""
+    logo_prompt = build_logo_prompt(
+        event_details=event_details,
+        specialist_outputs=specialist_outputs,
+        final_result_output=final_result.final_output
+    )
 
     logo_result = None
     logo_data = {}
@@ -1461,7 +779,7 @@ Output JSON with:
                         parsed[key] = []
                     elif key == "schedule":
                         # Create a basic schedule from event details if none exists
-                        basic_schedule = _create_basic_schedule(event_details)
+                        basic_schedule = create_basic_schedule(event_details)
                         parsed[key] = basic_schedule
                         print(f"   Created basic schedule with {len(basic_schedule.get('sessions', []))} sessions")
                     elif key == "budget":
@@ -1486,7 +804,7 @@ Output JSON with:
                 
                 if "sessions" not in schedule or not schedule.get("sessions"):
                     # Create basic schedule if sessions are missing or empty
-                    basic_schedule = _create_basic_schedule(event_details)
+                    basic_schedule = create_basic_schedule(event_details)
                     parsed["schedule"] = basic_schedule
                     print(f"   Schedule was empty, created basic schedule with {len(basic_schedule.get('sessions', []))} sessions")
             
@@ -1660,7 +978,7 @@ Output JSON with:
         
         if SANDBOX_ENABLED and SANDBOX_DIR.exists():
             print("📁 Copying files from sandbox to project...")
-            copy_sandbox_files_to_project()
+            copy_sandbox_files_to_project(SANDBOX_DIR, PROJECT_OUTPUT_DIR)
             print("✅ Sandbox files copied to event_outputs/\n")
     except Exception as cleanup_error:
         print(f"⚠️  Cleanup error: {cleanup_error}")
