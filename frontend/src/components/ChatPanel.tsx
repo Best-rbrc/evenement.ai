@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Send, Loader2, Bot, User, Sparkles } from 'lucide-react';
+import { MessageSquare, Send, Loader2, Bot, User, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { EventPlanResult } from '@/types/event';
@@ -157,27 +157,29 @@ export function ChatPanel({ currentPlan, originalWorkflowResult, onPlanUpdate }:
   };
 
   return (
-    <div className="w-full">
-      {/* Toggle Button */}
+    <>
+      {/* Floating Chat Button - positioned to the left of DevMenu */}
       <Button
         variant="outline"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full mb-4"
+        className="fixed bottom-6 right-24 z-50 w-14 h-14 rounded-full shadow-lg hover:shadow-xl transition-shadow"
+        size="icon"
+        title={isOpen ? "Close chat" : "Chat with coordinator"}
       >
-        <MessageSquare className="mr-2 h-4 w-4" />
-        {isOpen ? 'Hide' : 'Show'} Chat with Coordinator
+        {isOpen ? <X className="w-5 h-5" /> : <MessageSquare className="w-5 h-5" />}
       </Button>
 
       {/* Chat Panel */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
+            className="fixed bottom-24 right-28 z-50 w-96 max-h-[600px]"
           >
-            <Card className="w-full">
+            <Card className="shadow-2xl border-2">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Sparkles className="h-5 w-5" />
@@ -289,7 +291,7 @@ export function ChatPanel({ currentPlan, originalWorkflowResult, onPlanUpdate }:
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 }
 

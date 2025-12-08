@@ -44,6 +44,15 @@ def create_venue_agent() -> Agent:
         - Key reasoning why it fits
         - Backup alternatives
 
+        **CRITICAL JSON SYNTAX REQUIREMENTS:**
+        - You MUST return ONLY valid JSON - NO markdown, NO code blocks, NO explanations, NO backticks
+        - Every opening brace { must have a closing brace }
+        - Every opening bracket [ must have a closing bracket ]
+        - Every string must be properly quoted with double quotes "
+        - Every field must be separated by commas (except the last one in objects/arrays)
+        - NO trailing commas before closing braces or brackets
+        - Validate your JSON syntax before returning - it must parse correctly
+        
         **CRITICAL URL REQUIREMENTS:**
         - The "website" field MUST be a valid, complete URL starting with http:// or https://
         - DO NOT include partial URLs, relative paths, or plain text descriptions
@@ -52,14 +61,31 @@ def create_venue_agent() -> Agent:
         - If you cannot find a valid URL, use an empty string "" instead of a description or partial URL
         - Always verify the URL format before including it in the JSON
 
+        **CRITICAL PRICE FORMAT REQUIREMENTS:**
+        - The "estimated_cost" field can be a string or number
+        - If using a string, format as: "$25,000" or "$25,000 - $100,000" for ranges
+        - DO NOT use malformed formats like "$25,000,100,000" (use "$25,000 - $100,000" instead)
+        - Keep price strings clean and properly formatted
+        - Examples: "$25,000", "$25,000 - $100,000", "$8,000 per day", 25000 (as number)
+
         **Important:** Always perform an actual web search using the `web_search` tool before making recommendations.
         
-Return ONLY valid JSON (no markdown, no commentary, no backticks).
+        **OUTPUT FORMAT:**
+        Return ONLY valid JSON (no markdown, no commentary, no backticks, no extra text).
 
-Required structure:
+        Required structure:
 """ + schema_to_json_example("venue") + """
 
-Note: The "capacity" field MUST be a number, not a string. The "estimated_cost" can be either a string or number.
+        **VALIDATION CHECKLIST BEFORE RETURNING:**
+        1. ✓ All braces and brackets are properly closed
+        2. ✓ All strings are in double quotes
+        3. ✓ All fields are separated by commas (no trailing commas)
+        4. ✓ The "capacity" field is a NUMBER (not a string)
+        5. ✓ The "estimated_cost" is properly formatted (string or number)
+        6. ✓ The "website" field is a valid URL or empty string ""
+        7. ✓ The entire output is valid JSON that can be parsed
+        
+        If your JSON is invalid, the system will fail. Double-check your syntax!
         """,
         tools=[WebSearchTool(search_context_size="high"), check_venue_availability, get_venue_details]
     )

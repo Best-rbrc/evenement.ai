@@ -341,8 +341,55 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         except ValueError as e:
             print(f"⚠️  Schema validation error for {agent_name}: {e}")
             logger.warning(f"Agent '{agent_name}' validation FAILED: {e}")
-            print(f"   Storing raw output anyway for debugging...")
-            specialist_outputs[agent_name] = result.final_output
+            print(f"   Attempting to parse JSON anyway...")
+            
+            # Try to parse JSON even if validation fails
+            try:
+                import re
+                output_str = result.final_output.strip()
+                
+                # Try multiple JSON extraction strategies
+                parsed = None
+                
+                # Strategy 1: Try direct JSON parse
+                try:
+                    parsed = json.loads(output_str)
+                except json.JSONDecodeError:
+                    pass
+                
+                # Strategy 2: Extract JSON from code blocks
+                if not parsed:
+                    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', output_str, re.DOTALL)
+                    if json_match:
+                        try:
+                            parsed = json.loads(json_match.group(1))
+                        except json.JSONDecodeError:
+                            pass
+                
+                # Strategy 3: Find JSON object in text
+                if not parsed:
+                    json_match = re.search(r'\{[^{}]*(?:"summary"|"venues"|"name")[^{}]*\}', output_str, re.DOTALL)
+                    if json_match:
+                        try:
+                            # Try to fix common JSON issues
+                            json_str = json_match.group(0)
+                            # Remove trailing commas before closing braces/brackets
+                            json_str = re.sub(r',\s*}', '}', json_str)
+                            json_str = re.sub(r',\s*]', ']', json_str)
+                            parsed = json.loads(json_str)
+                        except json.JSONDecodeError:
+                            pass
+                
+                if parsed and isinstance(parsed, dict):
+                    print(f"   ✅ Successfully parsed JSON despite validation error")
+                    specialist_outputs[agent_name] = parsed
+                    logger.info(f"Agent '{agent_name}' parsed JSON successfully despite validation error")
+                else:
+                    print(f"   ⚠️  Could not parse JSON, storing raw output...")
+                    specialist_outputs[agent_name] = result.final_output
+            except Exception as parse_ex:
+                print(f"   ⚠️  JSON parsing failed: {parse_ex}, storing raw output...")
+                specialist_outputs[agent_name] = result.final_output
         
         # Update status to done
         for agent_stat in agent_statuses:
