@@ -448,3 +448,99 @@ Output JSON with:
 - usage_guidelines: array of usage instructions
 - branding_recommendations: array of branding tips"""
 
+
+def build_refinement_prompt(
+    event_details: Dict[str, Any],
+    current_plan: Dict[str, Any],
+    specialist_outputs: Dict[str, Any],
+    user_message: str,
+    required_agents: List[str]
+) -> str:
+    """Build the refinement prompt for the coordinator to analyze user requests.
+    
+    Args:
+        event_details: Original event information dict
+        current_plan: Current final_plan dict
+        specialist_outputs: Current specialist outputs dict
+        user_message: User's chat message requesting changes
+        required_agents: List of agents that were originally used
+        
+    Returns:
+        Formatted prompt string
+    """
+    return f"""You are the Event Planning Coordinator for "{event_details['event_name']}".
+
+{get_current_date_context()}
+
+The user has requested changes to the existing event plan. Your task is to:
+1. Analyze the user's request to understand what needs to change
+2. Determine which specialist agents need to be called to make those changes
+3. Call ONLY the necessary agents (don't regenerate everything)
+4. Merge the new agent outputs with the existing plan
+5. Regenerate the final plan with the changes integrated
+
+USER'S REQUEST:
+"{user_message}"
+
+CURRENT EVENT PLAN:
+{json.dumps(current_plan, indent=2)}
+
+CURRENT SPECIALIST OUTPUTS:
+{json.dumps(specialist_outputs, indent=2)}
+
+ORIGINAL EVENT DETAILS:
+{json.dumps(event_details, indent=2)}
+
+AGENTS ORIGINALLY USED:
+{', '.join(required_agents)}
+
+YOUR TASK:
+
+1. ANALYZE the user's request:
+   - What specific aspect needs to change? (venue, catering, budget, schedule, etc.)
+   - Which agents are affected by this change?
+   - Are there dependencies? (e.g., changing venue might affect catering or budget)
+
+2. DETERMINE which agents to call:
+   - Only call agents whose outputs need to change
+   - Consider dependencies (e.g., venue change → might need budget update)
+   - DO NOT call agents that aren't affected by the request
+
+3. CALL the necessary agents:
+   - Handoff to each affected agent with:
+     * The user's specific request
+     * Current context from existing outputs
+     * Any constraints or requirements
+   - Example: "User wants a cheaper venue. Current budget is $X. Find venues under $Y."
+
+4. MERGE the new outputs:
+   - Keep existing outputs from agents that weren't called
+   - Replace outputs from agents that were called with their new outputs
+   - Preserve data structure and completeness
+
+5. REGENERATE the final plan:
+   - Update the final_plan with new agent outputs
+   - Ensure recommendations section includes ALL specialist data (both updated and unchanged)
+   - Update executive_summary if major changes occurred
+   - Update budget if costs changed
+   - Update schedule if timing changed
+   - Keep timeline, risks, and action_items current
+
+CRITICAL REQUIREMENTS:
+- Only change what the user requested - preserve everything else
+- Ensure recommendations section includes COMPLETE outputs from ALL agents (both updated and unchanged)
+- Maintain data structure consistency
+- If budget changes, ensure budget section reflects new totals
+- If schedule changes, ensure schedule section is updated
+
+OUTPUT your analysis and actions as JSON:
+{{
+  "analysis": "What the user wants to change and which agents are affected",
+  "agents_to_call": ["agent1", "agent2", ...],  // Only agents that need to update
+  "reasoning": "Why these agents need to be called",
+  "dependencies": ["agent1 affects agent2 because..."],  // If any
+  "action": "I will now handoff to [agent names] to make these changes"
+}}
+
+After calling the agents, regenerate the final plan with the updated information."""
+

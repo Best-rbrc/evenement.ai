@@ -33,13 +33,16 @@ import { BudgetChart } from './BudgetChart';
 import { ScheduleTimeline } from './ScheduleTimeline';
 import { EventMap } from './EventMap';
 import { ExportMenu } from './ExportMenu';
+import { ChatPanel } from './ChatPanel';
 
 interface ResultsViewProps {
   result: EventPlanResult;
   onStartOver: () => void;
+  originalWorkflowResult?: any; // The full workflow result from backend
+  onPlanUpdate?: (updatedWorkflowResult: any) => void; // Callback when plan is updated
 }
 
-export function ResultsView({ result, onStartOver }: ResultsViewProps) {
+export function ResultsView({ result, onStartOver, originalWorkflowResult, onPlanUpdate }: ResultsViewProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     venues: true,
     budget: true,
@@ -573,6 +576,22 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
           </CollapsibleSection>
         </motion.div>
       </div>
+
+      {/* Chat Panel for Plan Refinement */}
+      {originalWorkflowResult && onPlanUpdate && (
+        <motion.div variants={itemVariants} className="mt-8">
+          <ChatPanel
+            currentPlan={result}
+            originalWorkflowResult={originalWorkflowResult}
+            onPlanUpdate={(updatedWorkflowResult) => {
+              // Call the parent's update handler
+              if (onPlanUpdate) {
+                onPlanUpdate(updatedWorkflowResult);
+              }
+            }}
+          />
+        </motion.div>
+      )}
     </motion.div>
   );
 }
