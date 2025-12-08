@@ -1535,30 +1535,24 @@ Output JSON with:
             print("Sending SMS notification...\n")
             
             try:
-                from twilio.rest import Client
+                from tools.sms_notifier import send_event_sms
                 
-                # Twilio credentials
-                account_sid = 'ACad1d89daf3c3b29db84f0714eeadb6cb'
-                auth_token = '2a20c86b0ed50623d61b9404f85a6281'
-                client = Client(account_sid, auth_token)
-                
-                # Create SMS body with Tally form
-                event_name = event_details.get('event_name', 'Event')
-                event_date = event_details.get('event_date', 'TBD')
-                form_url = form_data.get('form_url', 'Form link available soon')
-                
-                sms_body = f"Hey! You're invited to {event_name} on {event_date}. RSVP: {form_url}"
-                
-                # Send SMS
-                message = client.messages.create(
-                    from_='+15075955374',
-                    body=sms_body,
-                    to='+41784018164'
+                # Send SMS using the SMS notifier tool
+                form_url = form_data.get('form_url')
+                sms_result = send_event_sms(
+                    event_details=event_details,
+                    form_url=form_url
                 )
                 
-                print(f"✅ SMS sent successfully! Message SID: {message.sid}\n")
-                sms_sent = True
-                sms_message_sid = message.sid
+                if sms_result.get('success'):
+                    print(f"✅ SMS sent successfully! Message SID: {sms_result.get('message_sid')}\n")
+                    sms_sent = True
+                    sms_message_sid = sms_result.get('message_sid')
+                else:
+                    error_msg = sms_result.get('error', 'Unknown error')
+                    print(f"⚠️  Failed to send SMS: {error_msg}\n")
+                    sms_sent = False
+                    sms_message_sid = None
                 
             except Exception as sms_error:
                 print(f"⚠️  Failed to send SMS: {sms_error}\n")
