@@ -1,5 +1,6 @@
 """Logo generation agent using OpenAI's image generation API."""
 from agents import Agent, function_tool
+from workflows.schemas import schema_to_json_example
 from openai import OpenAI
 import os
 import json
@@ -94,16 +95,7 @@ def create_logo_agent() -> Agent:
         3. Provide design information and branding recommendations
         
         Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-        {
-          "status": "success|error",
-          "logo_file_path": "path/to/logo.png",
-          "logo_url": "file://...",
-          "design_rationale": "string",
-          "color_palette": "string",
-          "typography_suggestions": "string",
-          "usage_guidelines": ["string"],
-          "branding_recommendations": ["string"]
-        }
+""" + schema_to_json_example("logo") + """
         """,
         tools=[generate_logo_image]
     )

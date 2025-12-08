@@ -232,12 +232,28 @@ Your task for PHASE 3 - FINALIZATION:
      * For multi-day events: Include date for each session
      * Minimum: At least one session with start_time, end_time, and name
    - Detailed budget breakdown by category with totals
-   - All specialist recommendations (organized and refined)
+   - **ALL SPECIALIST RECOMMENDATIONS (CRITICAL)**: You MUST include COMPLETE data from ALL specialist agents in the "recommendations" section
    - Risk assessment with mitigation strategies
    - Prioritized action items with deadlines
    - Assumptions made
 
-4. OUTPUT as valid JSON:
+4. **CRITICAL: RECOMMENDATIONS SECTION MUST INCLUDE ALL SPECIALIST DATA**
+
+The "recommendations" section is the SINGLE SOURCE OF TRUTH for the frontend. You MUST include the COMPLETE output from each specialist agent:
+
+- "venue": Include the ENTIRE venue agent output (venues array, summary, top_recommendation, timeline_and_logistics)
+- "catering": Include the ENTIRE catering agent output (menu_overview, dietary_accommodations, budget_estimate, summary, timeline_and_logistics)
+- "programme": Include the ENTIRE programme agent output (programme_recommendations object with all fields)
+- "speakers": Include the ENTIRE speakers agent output (speakers_recommendations object with top_speaker_options, etc.)
+- "activities": Include the ENTIRE activities agent output (activity_planning object with recommendations, logistics, budget_estimate)
+- "entertainment": Include the ENTIRE entertainment agent output (entertainment_recommendations object with all fields)
+- "communication": Include the ENTIRE communication agent output (communication_recommendations object with overview, channels, key_messages, timeline, budget_overview)
+- "budgeting": Include the ENTIRE budgeting agent output (budget_allocation_recommended, major_category_breakdowns, what_if_scenarios, etc.)
+- "scheduling": Include the ENTIRE scheduling agent output (status, optimized_schedule, metrics, conflicts_explained, etc.)
+
+DO NOT create simplified versions - copy the COMPLETE specialist outputs into recommendations. The frontend relies ONLY on final_plan.recommendations.
+
+5. OUTPUT as valid JSON:
 {{
   "executive_summary": "...",
   "timeline": [
@@ -266,15 +282,21 @@ Your task for PHASE 3 - FINALIZATION:
     "status": "optimal | feasible | infeasible | basic"  // "basic" if created from event details without optimization
   }},
   "budget": {{
-    "total_available": "...",
-    "total_allocated": "...",
-    "by_category": {{}},
+    "total_available": number,
+    "total_allocated": number,
+    "by_category": {{"venue": number, "catering": number, ...}},  // Simple dict: category -> amount
     "status": "within_budget | over_budget | at_limit"
   }},
   "recommendations": {{
-    "venue": {{}},
-    "catering": {{}},
-    ...
+    "venue": {{"summary": "...", "venues": [...], "timeline_and_logistics": [...], "top_recommendation": {{...}}}},  // COMPLETE venue agent output
+    "catering": {{"summary": "...", "menu_overview": [...], "dietary_accommodations": [...], "budget_estimate": {{...}}, "timeline_and_logistics": [...]}},  // COMPLETE catering agent output
+    "programme": {{"summary": "...", "programme_recommendations": {{...}}, "next_steps": [...]}},  // COMPLETE programme agent output
+    "speakers": {{"summary": "...", "speakers_recommendations": {{...}}, "recommendation_rationale": "..."}},  // COMPLETE speakers agent output
+    "activities": {{"activity_planning": {{...}}}},  // COMPLETE activities agent output
+    "entertainment": {{"entertainment_recommendations": {{...}}}},  // COMPLETE entertainment agent output
+    "communication": {{"communication_recommendations": {{...}}}},  // COMPLETE communication agent output
+    "budgeting": {{"budget_allocation_recommended": {{...}}, "major_category_breakdowns": {{...}}, "what_if_scenarios": [...], ...}},  // COMPLETE budgeting agent output
+    "scheduling": {{"status": "...", "optimized_schedule": [...], "metrics": {{...}}, ...}}  // COMPLETE scheduling agent output (if used)
   }},
   "risks": [
     {{"risk": "...", "severity": "high|medium|low", "mitigation": "..."}}
@@ -285,7 +307,9 @@ Your task for PHASE 3 - FINALIZATION:
   "assumptions": [...]
 }}
 
-Use handoffs if needed to refine or add information. Then provide your final synthesized plan."""
+Use handoffs if needed to refine or add information. Then provide your final synthesized plan.
+
+REMEMBER: The frontend relies ONLY on final_plan.recommendations - include COMPLETE specialist data there."""
 
 
 def build_calendar_prompt(

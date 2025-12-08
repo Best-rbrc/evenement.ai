@@ -1,4 +1,5 @@
 from agents import Agent, function_tool, WebSearchTool
+from workflows.schemas import schema_to_json_example
 
 @function_tool
 def create_invitation_design(event_name: str, event_type: str, event_date: str) -> str:
@@ -41,15 +42,7 @@ def create_communication_agent() -> Agent:
         Use the available tools to create invitations, plan marketing, and create templates.
         
         Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-        {
-          "communication_recommendations": {
-            "overview": "str",
-            "channels": ["str"],
-            "key_messages": ["str"],
-            "timeline": ["str"],
-            "budget_overview": {"total": 0, "breakdown": {"channel": 0}}
-          }
-        }
+""" + schema_to_json_example("communication") + """
         """,
         tools=[create_invitation_design, plan_marketing_campaign, create_communication_templates]
     )

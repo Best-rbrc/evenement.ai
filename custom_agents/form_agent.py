@@ -9,6 +9,7 @@ from agents import Agent
 from agents.mcp import MCPServerStdio
 from agents.model_settings import ModelSettings
 from agents import Runner
+from workflows.schemas import schema_to_json_example
 
 TALLY_MCP_URL = "https://api.tally.so/mcp"
 
@@ -85,7 +86,7 @@ def create_form_agent(mcp_servers=None) -> Agent:
         - If form creation fails, use empty string "" for form_url
         
         CRITICAL: After successful form creation, return ONLY valid JSON in this exact format:
-        {"form_url": "https://tally.so/r/xxxxx", "status": "success", "form_details": "brief description"}
+""" + schema_to_json_example("form") + """
         
         Do not include any other text, explanations, or markdown formatting in your response.
 

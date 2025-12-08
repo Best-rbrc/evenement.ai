@@ -98,7 +98,7 @@ Final plan structure:
     "by_category": {{}},
     "status": "within_budget | over_budget | at_limit"
   }},
-  "recommendations": {{"venue": {{}}, "catering": {{}}, ...}},
+  "recommendations": {{"venue": {{...}}, "catering": {{...}}, ...}},  // MUST include COMPLETE specialist outputs, not empty objects
   "risks": [{{"risk": "...", "severity": "...", "mitigation": "..."}}],
   "action_items": [{{"action": "...", "owner": "...", "deadline": "...", "priority": "..."}}],
   "assumptions": [...]

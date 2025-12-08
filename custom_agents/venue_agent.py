@@ -1,4 +1,5 @@
 from agents import Agent, function_tool, WebSearchTool
+from workflows.schemas import schema_to_json_example
 
 @function_tool
 def search_venues(location: str, capacity: int, event_type: str, budget_range: str) -> str:
@@ -53,31 +54,12 @@ def create_venue_agent() -> Agent:
 
         **Important:** Always perform an actual web search using the `web_search` tool before making recommendations.
         
-       Return ONLY valid JSON (no markdown, no commentary, no backticks).
-All values MUST strictly follow the data types below.
-Do NOT use "+", ranges, or parentheses in numeric fields.
+Return ONLY valid JSON (no markdown, no commentary, no backticks).
 
-{
-  "summary": "string",
-  "venues": [
-    {
-      "name": "string",
-      "location": "string",
-      "capacity": "string",
-      "estimated_cost": "string",
-      "amenities": ["string"],
-      "availability_notes": "string",
-      "website": "string (MUST be valid URL with http:// or https://, or empty string if not available)",
-      "backup_alternatives": ["string"]
-    }
-  ],
-  "timeline_and_logistics": ["string"],
-  "top_recommendation": {
-    "option": "string",
-    "rationale": "string",
-    "dependencies": ["string"]
-  }
-}
+Required structure:
+""" + schema_to_json_example("venue") + """
+
+Note: The "capacity" field MUST be a number, not a string. The "estimated_cost" can be either a string or number.
         """,
         tools=[WebSearchTool(search_context_size="high"), check_venue_availability, get_venue_details]
     )

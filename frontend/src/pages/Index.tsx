@@ -77,25 +77,9 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
 
   const finalPlan = parseJson<JsonRecord>(workflow.final_plan) || {};
 
-  const specialistOutputs: JsonRecord = Object.fromEntries(
-    Object.entries(workflow.specialist_outputs || {}).map(([key, value]) => {
-      const parsed = parseJson<JsonRecord>(value);
-      return [key, parsed ?? value];
-    })
-  );
-
+  // Frontend now relies ONLY on final_plan - all specialist data should be in final_plan.recommendations
   const planningPhase = parseJson<JsonRecord>(workflow.planning_phase) || {};
   const eventDetailsSource = parseJson<JsonRecord>(workflow.event_details) || {};
-
-  const budgetingData = parseJson<JsonRecord>(specialistOutputs?.budgeting) || {};
-  const schedulingData = parseJson<JsonRecord>(specialistOutputs?.scheduling) || {};
-  const venueData = parseJson<JsonRecord>(specialistOutputs?.venue) || {};
-  const programmeData = parseJson<JsonRecord>(specialistOutputs?.programme) || {};
-  const speakersData = parseJson<JsonRecord>(specialistOutputs?.speakers) || {};
-  const cateringData = parseJson<JsonRecord>(specialistOutputs?.catering) || {};
-  const activitiesData = parseJson<JsonRecord>(specialistOutputs?.activities) || {};
-  const entertainmentData = parseJson<JsonRecord>(specialistOutputs?.entertainment) || {};
-  const communicationData = parseJson<JsonRecord>(specialistOutputs?.communication) || {};
 
   const budgetRange = formData
     ? `$${formData.budgetMin.toLocaleString()} - $${formData.budgetMax.toLocaleString()}`
@@ -125,11 +109,8 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     budget: budgetRange,
   } as EventPlanResult['eventDetails'];
 
-  const venueCandidates = firstArray([
-    finalPlan?.recommendations?.venue?.venues,
-    venueData?.venues,
-    programmeData?.programme_recommendations?.options,
-  ]) || [];
+  // Use only final_plan.recommendations.venue - no fallbacks
+  const venueCandidates = asArray(finalPlan?.recommendations?.venue?.venues) || [];
 
   // Helper function to format prices with $ symbol
   const formatPrice = (value: any): string => {
@@ -220,17 +201,25 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     link: cleanUrl(item.website || item.link || item.url),
   }));
 
-  // Extract budget breakdown - try final_plan.budget.by_category first (from coordinator), 
-  // then fallback to budgeting agent's major_category_breakdowns
+  // Extract budget breakdown - use ONLY final_plan.budget.by_category
   let budgetBreakdowns: Record<string, any> = {};
   
-  // First try final_plan.budget.by_category (coordinator's synthesized budget)
   if (finalPlan?.budget?.by_category && typeof finalPlan.budget.by_category === 'object') {
     budgetBreakdowns = finalPlan.budget.by_category;
   }
-  // Fallback to budgeting agent's breakdown
-  else if (budgetingData.major_category_breakdowns && typeof budgetingData.major_category_breakdowns === 'object') {
-    budgetBreakdowns = budgetingData.major_category_breakdowns;
+  
+  // Also check final_plan.recommendations.budgeting for detailed breakdown if needed
+  if (!budgetBreakdowns || Object.keys(budgetBreakdowns).length === 0) {
+    const budgetingRec = finalPlan?.recommendations?.budgeting;
+    // Fallback to detailed breakdown from recommendations if simple breakdown is empty
+    if (budgetingRec?.major_category_breakdowns && typeof budgetingRec.major_category_breakdowns === 'object') {
+      // Convert nested structure to simple dict
+      Object.entries(budgetingRec.major_category_breakdowns).forEach(([category, data]: [string, any]) => {
+        if (data && typeof data === 'object' && typeof data.recommended_spend === 'number') {
+          budgetBreakdowns[category] = data.recommended_spend;
+        }
+      });
+    }
   }
   
   // Calculate total for percentages
@@ -275,7 +264,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
   if (breakdown.length === 0) {
     console.warn('No budget breakdown found. Available data:', {
       finalPlanBudget: finalPlan?.budget,
-      budgetingDataMajorBreakdowns: budgetingData.major_category_breakdowns,
+      budgetingRec: finalPlan?.recommendations?.budgeting,
       budgetBreakdownsKeys: Object.keys(budgetBreakdowns),
     });
   } else {
@@ -283,7 +272,8 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
   }
 
   const budgetTotal = Number(finalPlan?.budget?.total_allocated) || breakdown.reduce((sum, entry) => sum + entry.amount, 0);
-  const scenarios = asArray(budgetingData.what_if_scenarios)
+  const budgetingRec = finalPlan?.recommendations?.budgeting;
+  const scenarios = asArray(budgetingRec?.what_if_scenarios || [])
     .map((scenario: any) => {
       if (!scenario) return '';
       if (typeof scenario === 'string') return scenario;
@@ -291,36 +281,18 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     })
     .filter(Boolean);
 
-  // Extract schedule from multiple possible locations with better fallbacks
+  // Extract schedule - use ONLY final_plan.schedule.sessions
   let scheduleSessions: any[] = [];
   
-  // Try finalPlan.schedule.sessions first (most reliable)
   if (finalPlan?.schedule?.sessions && Array.isArray(finalPlan.schedule.sessions)) {
     scheduleSessions = finalPlan.schedule.sessions;
   }
-  // Try schedulingData.optimized_schedule
-  else if (schedulingData?.optimized_schedule && Array.isArray(schedulingData.optimized_schedule)) {
-    scheduleSessions = schedulingData.optimized_schedule;
-  }
-  // Try programme recommendations
-  else if (programmeData?.programme_recommendations?.daily_schedule && Array.isArray(programmeData.programme_recommendations.daily_schedule)) {
-    scheduleSessions = programmeData.programme_recommendations.daily_schedule;
-  }
-  // Try programme daily_schedule
-  else if (programmeData?.daily_schedule && Array.isArray(programmeData.daily_schedule)) {
-    scheduleSessions = programmeData.daily_schedule;
-  }
-  // Try session_and_flow as fallback
-  else if (programmeData?.programme_recommendations?.session_and_flow) {
-    const sessionFlow = programmeData.programme_recommendations.session_and_flow;
-    if (typeof sessionFlow === 'object' && !Array.isArray(sessionFlow)) {
-      scheduleSessions = Object.entries(sessionFlow).map(([key, value]: [string, any]) => ({
-        name: key,
-        time: typeof value === 'string' ? value : value?.time || key,
-        duration: value?.duration || 'TBD',
-        start_time: typeof value === 'string' ? value.split('-')[0]?.trim() : value?.start_time,
-        end_time: typeof value === 'string' ? value.split('-')[1]?.trim() : value?.end_time,
-      }));
+  
+  // Fallback: check final_plan.recommendations.scheduling if schedule.sessions is empty
+  if (scheduleSessions.length === 0) {
+    const schedulingRec = finalPlan?.recommendations?.scheduling;
+    if (schedulingRec?.optimized_schedule && Array.isArray(schedulingRec.optimized_schedule)) {
+      scheduleSessions = schedulingRec.optimized_schedule;
     }
   }
 
@@ -433,18 +405,16 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
   if (schedule.length === 0) {
     console.warn('No schedule found. Available data:', {
       finalPlanSchedule: finalPlan?.schedule,
-      schedulingData: schedulingData?.optimized_schedule,
-      programmeData: programmeData?.programme_recommendations,
+      schedulingRec: finalPlan?.recommendations?.scheduling,
       finalPlanKeys: finalPlan ? Object.keys(finalPlan) : [],
     });
   } else {
     console.log(`✅ Found ${schedule.length} schedule items`);
   }
 
-  const speakersSource = firstArray([
-    finalPlan?.recommendations?.speakers?.top_speaker_options,
-    speakersData?.speakers_recommendations?.top_speaker_options,
-  ]) || [];
+  // Use only final_plan.recommendations.speakers
+  const speakersRec = finalPlan?.recommendations?.speakers;
+  const speakersSource = asArray(speakersRec?.speakers_recommendations?.top_speaker_options || []);
 
   const speakers = speakersSource.map((item: any) => ({
     name: item.name || 'Speaker',
@@ -455,13 +425,12 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     image: item.image,
   }));
 
-  const cateringRec = cateringData?.catering_recommendations || cateringData;
-  const cateringSource = cateringRec || {};
+  // Use only final_plan.recommendations.catering
+  const cateringRec = finalPlan?.recommendations?.catering || {};
 
-  const activitiesSource = firstArray([
-    finalPlan?.recommendations?.activities?.recommendations,
-    activitiesData?.activity_planning?.recommendations,
-  ]) || [];
+  // Use only final_plan.recommendations.activities
+  const activitiesRec = finalPlan?.recommendations?.activities;
+  const activitiesSource = asArray(activitiesRec?.activity_planning?.recommendations || []);
 
   const activities = activitiesSource.map((item: any) => ({
     name: item.name || 'Activity',
@@ -469,10 +438,9 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     duration: String(item.duration || ''),
   }));
 
-  const entertainmentSource = firstArray([
-    finalPlan?.recommendations?.entertainment?.specific_options,
-    entertainmentData?.entertainment_recommendations?.specific_options,
-  ]) || [];
+  // Use only final_plan.recommendations.entertainment
+  const entertainmentRec = finalPlan?.recommendations?.entertainment;
+  const entertainmentSource = asArray(entertainmentRec?.entertainment_recommendations?.specific_options || []);
 
   const entertainment = entertainmentSource.map((item: any) => ({
     type: item.name || 'Entertainment',
@@ -480,7 +448,8 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     cost: formatPrice(item.cost_estimate || item.cost || ''),
   }));
 
-  const commRecommendations = communicationData?.communication_recommendations || communicationData || {};
+  // Use only final_plan.recommendations.communication
+  const commRecommendations = finalPlan?.recommendations?.communication?.communication_recommendations || {};
   const communication = {
     timeline: asArray(commRecommendations.timeline || []).map((entry: any) =>
       typeof entry === 'string' ? { date: '', action: entry } : { date: entry.date || '', action: entry.action || entry }
@@ -532,13 +501,15 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
     console.log(`✅ Found ${timelineItems.length} timeline items:`, timelineItems);
   }
 
-  const risks = asArray(finalPlan?.risks || schedulingData?.conflicts_explained || []).map((item: any) => ({
-    risk: item.risk || item.conflict || String(item),
-    mitigation: item.mitigation || item.impact || 'Review scheduling constraints',
+  // Use only final_plan.risks
+  const risks = asArray(finalPlan?.risks || []).map((item: any) => ({
+    risk: item.risk || String(item),
+    mitigation: item.mitigation || 'Review and address',
   }));
 
-  const actionItems = asArray(finalPlan?.action_items || schedulingData?.actionable_suggestions || []).map((item: any, index: number) => ({
-    task: item.action || item.task || item.suggestion || String(item),
+  // Use only final_plan.action_items
+  const actionItems = asArray(finalPlan?.action_items || []).map((item: any, index: number) => ({
+    task: item.action || item.task || String(item),
     owner: item.owner || 'Event Coordinator',
     deadline: item.deadline || 'Before event date',
     priority: (item.priority as 'high' | 'medium' | 'low') || (index < 3 ? 'high' : 'medium'),
@@ -656,9 +627,11 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
   
   // Fallback if no executive summary found
   if (!executiveSummary) {
+    const schedulingRec = finalPlan?.recommendations?.scheduling;
+    const schedulingStatus = schedulingRec?.status || finalPlan?.schedule?.status;
     executiveSummary = `${eventDetails.name} is a ${eventDetails.type} scheduled for ${eventDetails.date} at ${eventDetails.location}. ` +
       `Expected attendance: ${eventDetails.guestCount} guests. Budget: ${eventDetails.budget}.` +
-      (schedulingData?.status === 'infeasible' ? ` Note: ${schedulingData.message || ''}` : '');
+      (schedulingStatus === 'infeasible' ? ` Note: Scheduling conflicts detected.` : '');
   }
 
   // Extract export data
@@ -683,14 +656,14 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
       total: budgetTotal,
       breakdown,
       scenarios,
-      warnings: asArray(budgetingData.warnings || []),
+      warnings: asArray(budgetingRec?.warnings || []),
     },
     schedule,
     speakers,
     catering: {
-      menuPreview: asArray(cateringSource.menu_overview || []),
-      dietaryOptions: asArray(cateringSource.dietary_accommodations || []),
-      estimatedCost: formatPrice(cateringSource.budget_estimate?.total || cateringSource.estimated_total || cateringSource.estimatedCost || 'TBD'),
+      menuPreview: asArray(cateringRec.menu_overview || []),
+      dietaryOptions: asArray(cateringRec.dietary_accommodations || []),
+      estimatedCost: formatPrice(cateringRec.budget_estimate?.total || cateringRec.estimated_total || cateringRec.estimatedCost || 'TBD'),
     },
     activities,
     entertainment,
