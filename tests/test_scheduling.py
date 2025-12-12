@@ -1,4 +1,8 @@
 """Test script for the Scheduling Agent with Google OR-Tools."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import json
 import os
 from dotenv import load_dotenv

@@ -1,4 +1,8 @@
 """Quick test to verify coordinator selects scheduling agent for conferences."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import json
 from agents import Runner
 from custom_agents.base import create_specialized_agents
