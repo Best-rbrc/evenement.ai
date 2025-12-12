@@ -20,13 +20,30 @@ logger = logging.getLogger(__name__)
 
 
 def to_dict(obj: Any) -> Any:
-    """Convert Pydantic models to dicts, recursively."""
+    """Convert Pydantic models to dicts, recursively.
+    
+    Handles:
+    - Pydantic models (with model_dump or dict methods)
+    - Dicts (recursively converts nested values)
+    - Lists (recursively converts items)
+    - JSON strings (parses them)
+    - Other types (returns as-is)
+    """
     if isinstance(obj, BaseModel):
         return obj.model_dump()
     elif isinstance(obj, dict):
         return {k: to_dict(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [to_dict(item) for item in obj]
+    elif isinstance(obj, str):
+        # Try to parse as JSON string if it looks like JSON
+        try:
+            parsed = json.loads(obj)
+            # Recursively convert the parsed JSON
+            return to_dict(parsed)
+        except (json.JSONDecodeError, ValueError):
+            # Not JSON, return as string
+            return obj
     return obj
 
 
@@ -189,9 +206,31 @@ def refine_event_plan(
         final_result = run_sync_with_backoff(coordinator, finalization_prompt, max_turns=15)  # Reduced from 20
         
         # Convert Pydantic model to dict for JSON serialization
-        updated_plan = to_dict(final_result.final_output)
-        logger.info(" Final plan regenerated successfully")
-        print(" Final plan regenerated")
+        # Handle different output types robustly
+        try:
+            if hasattr(final_result.final_output, 'model_dump'):
+                updated_plan = final_result.final_output.model_dump()
+            elif hasattr(final_result.final_output, 'dict'):
+                updated_plan = final_result.final_output.dict()
+            elif isinstance(final_result.final_output, dict):
+                updated_plan = final_result.final_output
+            else:
+                # Use to_dict which handles JSON strings and other types
+                updated_plan = to_dict(final_result.final_output)
+            
+            # Ensure it's a dict (not a string)
+            if isinstance(updated_plan, str):
+                updated_plan = json.loads(updated_plan)
+            
+            logger.info(" Final plan regenerated successfully")
+            print(" Final plan regenerated")
+        except Exception as parse_error:
+            logger.error(f" Error parsing final plan output: {parse_error}")
+            print(f"  Error parsing plan output: {parse_error}")
+            # Fallback: try to_dict which handles more cases
+            updated_plan = to_dict(final_result.final_output)
+            if isinstance(updated_plan, str):
+                updated_plan = json.loads(updated_plan)
     except Exception as e:
         logger.error(f" Error regenerating final plan: {e}")
         print(f"  Error regenerating plan: {e}")
