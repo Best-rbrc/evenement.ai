@@ -1,4 +1,8 @@
 """End-to-end test for scheduling agent integration in full workflow."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import json
 from workflows.event_planning_workflow import run_event_planning
 
@@ -88,14 +92,15 @@ def test_conference_with_scheduling():
         print("="*60)
         
         # Save full result to file for inspection
-        with open('test_scheduling_e2e_result.json', 'w') as f:
+        output_file = Path(__file__).parent.parent / 'test_scheduling_e2e_result.json'
+        with open(output_file, 'w') as f:
             json.dump({
                 'event_details': event_details,
                 'agents_used': result.get('agents_used', []),
                 'final_plan': final_plan
             }, f, indent=2)
         
-        print("\n💾 Full result saved to: test_scheduling_e2e_result.json")
+        print(f"\n💾 Full result saved to: {output_file}")
         
         return True
         

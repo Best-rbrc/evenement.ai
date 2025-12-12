@@ -1,4 +1,8 @@
 """Test PDF report generation."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from tools.report_generator import generate_event_proposal_pdf
 import json
 from datetime import datetime

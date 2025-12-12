@@ -17,7 +17,7 @@ load_dotenv()
 
 # Configuration
 SANDBOX_DIR = Path("/tmp/mcp_event_outputs")
-PROJECT_OUTPUT_DIR = Path(__file__).parent / "event_outputs"
+PROJECT_OUTPUT_DIR = Path(__file__).parent.parent / "event_outputs"
 
 
 async def setup_sandboxed_mcp():

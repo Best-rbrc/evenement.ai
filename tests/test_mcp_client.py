@@ -8,7 +8,9 @@ from agents import Agent, Runner
 from agents.mcp import MCPServerStdio
 
 # .env laden (Projektroot)
-ENV_PATH = Path(__file__).parent / ".env"
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+ENV_PATH = Path(__file__).parent.parent / ".env"
 load_dotenv(ENV_PATH)
 
 
