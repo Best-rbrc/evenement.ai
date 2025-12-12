@@ -66,7 +66,7 @@ export function DevMenu({ onSettingsChange }: DevMenuProps) {
               <div className="flex items-center justify-between space-x-2 p-3 rounded-lg bg-muted/50">
                 <div className="flex-1">
                   <Label htmlFor="sandbox-mode" className="text-sm font-medium cursor-pointer">
-                    🔒 Sandbox Mode
+                     Sandbox Mode
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Use sandboxed Docker MCP for forms
@@ -83,7 +83,7 @@ export function DevMenu({ onSettingsChange }: DevMenuProps) {
               <div className="flex items-center justify-between space-x-2 p-3 rounded-lg bg-muted/50">
                 <div className="flex-1">
                   <Label htmlFor="sms-mode" className="text-sm font-medium cursor-pointer">
-                    📱 SMS Notifications
+                     SMS Notifications
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Send event details via SMS ($1/msg)
@@ -101,10 +101,10 @@ export function DevMenu({ onSettingsChange }: DevMenuProps) {
                 <p className="text-muted-foreground">Current Config:</p>
                 <div className="flex flex-col gap-1 pl-2">
                   <span className="font-mono">
-                    Forms: {settings.enableSandbox ? '🔒 Sandboxed (Docker)' : '📡 Unsandboxed (mcp-remote)'}
+                    Forms: {settings.enableSandbox ? ' Sandboxed (Docker)' : ' Unsandboxed (mcp-remote)'}
                   </span>
                   <span className="font-mono">
-                    SMS: {settings.enableSMS ? '✅ Enabled' : '❌ Disabled'}
+                    SMS: {settings.enableSMS ? ' Enabled' : ' Disabled'}
                   </span>
                 </div>
               </div>

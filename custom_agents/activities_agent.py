@@ -1,10 +1,14 @@
-from agents import Agent, function_tool, WebSearchTool
-from workflows.schemas import schema_to_json_example
+from agents import Agent, function_tool, WebSearchTool, AgentOutputSchema
+from workflows.pydantic_schemas import ActivitiesOutput
 
 def create_activities_agent() -> Agent:
-    """Create an activities specialist agent."""
+    """Create an activities specialist agent.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Activities Specialist",
+         output_type=AgentOutputSchema(ActivitiesOutput, strict_json_schema=False),
         instructions="""
         You are a professional activities coordinator with expertise in:
         - Recreational activity planning and coordination
@@ -24,9 +28,6 @@ def create_activities_agent() -> Agent:
         7. Activity success metrics and evaluation
         
         Always consider group dynamics, objectives, and safety requirements.
-        
-        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-""" + schema_to_json_example("activities") + """
         """
     )
 

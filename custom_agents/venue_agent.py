@@ -1,5 +1,5 @@
-from agents import Agent, function_tool, WebSearchTool
-from workflows.schemas import schema_to_json_example
+from agents import Agent, function_tool, WebSearchTool, AgentOutputSchema
+from workflows.pydantic_schemas import VenueOutput
 
 @function_tool
 def search_venues(location: str, capacity: int, event_type: str, budget_range: str) -> str:
@@ -22,9 +22,13 @@ def get_venue_details(venue_name: str) -> str:
     return f"Venue details for {venue_name}: Capacity, amenities, pricing, accessibility info"
 
 def create_venue_agent() -> Agent:
-    """Create a venue specialist agent with real web search capabilities."""
+    """Create a venue specialist agent with real web search capabilities.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Venue Specialist",
+        output_type=AgentOutputSchema(VenueOutput, strict_json_schema=False),
         handoff_description="Finds and evaluates real venues for the event.",
         instructions="""
         You are a professional venue specialist.
@@ -73,17 +77,14 @@ def create_venue_agent() -> Agent:
         **OUTPUT FORMAT:**
         Return ONLY valid JSON (no markdown, no commentary, no backticks, no extra text).
 
-        Required structure:
-""" + schema_to_json_example("venue") + """
-
         **VALIDATION CHECKLIST BEFORE RETURNING:**
-        1. ✓ All braces and brackets are properly closed
-        2. ✓ All strings are in double quotes
-        3. ✓ All fields are separated by commas (no trailing commas)
-        4. ✓ The "capacity" field is a NUMBER (not a string)
-        5. ✓ The "estimated_cost" is properly formatted (string or number)
-        6. ✓ The "website" field is a valid URL or empty string ""
-        7. ✓ The entire output is valid JSON that can be parsed
+        1.  All braces and brackets are properly closed
+        2.  All strings are in double quotes
+        3.  All fields are separated by commas (no trailing commas)
+        4.  The "capacity" field is a NUMBER (not a string)
+        5.  The "estimated_cost" is properly formatted (string or number)
+        6.  The "website" field is a valid URL or empty string ""
+        7.  The entire output is valid JSON that can be parsed
         
         If your JSON is invalid, the system will fail. Double-check your syntax!
         """,

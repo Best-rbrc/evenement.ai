@@ -10,8 +10,115 @@ The coordinator's role is to:
 The coordinator works primarily through intelligent prompting and handoffs,
 not through tools. It can call any specialist agent multiple times if needed.
 """
-from agents import Agent
+from agents import Agent, AgentOutputSchema
 from typing import Dict, List, Any
+from workflows.pydantic_schemas import PlanningOutput, FinalPlanOutput
+
+
+def create_planning_coordinator(event_details: Dict[str, Any], required_agents: List[str]) -> Agent:
+    """Create coordinator for Phase 1: Planning and agent selection.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    
+    Args:
+        event_details: Dictionary with event information
+        required_agents: List of available agent types
+        
+    Returns:
+        Agent configured for planning phase with PlanningOutput schema
+    """
+    system_prompt = f"""You are the Event Planning Coordinator analyzing requirements for "{event_details['event_name']}", a {event_details['event_type']} event.
+
+YOUR TASK: Analyze the event requirements and determine which specialist agents to use and in what order.
+
+EVENT CONTEXT:
+- Event: {event_details.get('event_name', 'N/A')}
+- Type: {event_details.get('event_type', 'N/A')}
+- Date: {event_details.get('event_date', 'TBD')}
+- Location: {event_details.get('location_preference', 'Flexible')}
+- Budget: {event_details.get('budget_range', 'Not specified')}
+- Guests: {event_details.get('guest_count', 'TBD')}
+- Requirements: {event_details.get('special_requirements', 'None specified')}
+
+AVAILABLE SPECIALISTS:
+{', '.join(required_agents)}
+
+DECISION GUIDELINES:
+1. ALWAYS include budgeting early (after venue/catering for cost estimates)
+2. Include scheduling for multi-session events with speakers
+3. Consider event type when selecting specialists
+4. Order matters - dependencies should be considered
+
+OUTPUT: You will return a structured JSON with:
+- analysis: Your analysis of the event requirements
+- required_agents: List of agent names to use (from available list)
+- execution_order_rationale: Why this order makes sense
+- special_considerations: Any special notes or constraints"""
+
+    return Agent(
+        name="Planning Coordinator",
+         output_type=AgentOutputSchema(PlanningOutput, strict_json_schema=False),
+        instructions=system_prompt,
+    )
+
+
+def create_finalization_coordinator(event_details: Dict[str, Any], required_agents: List[str], specialist_outputs: Dict[str, Any]) -> Agent:
+    """Create coordinator for Phase 3: Final plan synthesis.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    
+    Args:
+        event_details: Dictionary with event information
+        required_agents: List of agents that were used
+        specialist_outputs: Outputs from all specialist agents
+        
+    Returns:
+        Agent configured for finalization with FinalPlanOutput schema
+    """
+    outputs_summary = "\n".join([
+        f"- {name}: {len(str(output))} chars of data"
+        for name, output in specialist_outputs.items()
+    ])
+    
+    system_prompt = f"""You are the Event Planning Coordinator synthesizing the final plan for "{event_details['event_name']}".
+
+EVENT CONTEXT:
+- Event: {event_details.get('event_name', 'N/A')}
+- Type: {event_details.get('event_type', 'N/A')}
+- Date: {event_details.get('event_date', 'TBD')}
+- Location: {event_details.get('location_preference', 'Flexible')}
+- Budget: {event_details.get('budget_range', 'Not specified')}
+- Guests: {event_details.get('guest_count', 'TBD')}
+
+SPECIALIST OUTPUTS RECEIVED:
+{outputs_summary}
+
+YOUR TASK: Create a comprehensive final event plan by synthesizing all specialist outputs.
+
+CRITICAL REQUIREMENTS:
+1. Include COMPLETE specialist outputs in "recommendations" field - not summaries
+2. Create a detailed timeline with phases, tasks, and deadlines
+3. Build a schedule with sessions (use scheduling agent output if available)
+4. Synthesize budget from budgeting agent output
+5. Identify risks and mitigation strategies
+6. Create actionable action items with owners and deadlines
+7. Document all assumptions made
+
+The output MUST follow the FinalPlanOutput schema exactly:
+- executive_summary: 2-3 paragraph overview
+- timeline: List of phases with tasks and deadlines
+- schedule: Sessions with times, rooms, speakers (mark as basic if not optimized)
+- budget: Total, allocated, by category, status
+- recommendations: COMPLETE specialist outputs (not empty)
+- risks: Identified risks with severity and mitigation
+- action_items: Actionable items with priority and deadline
+- assumptions: All assumptions made during planning"""
+
+    return Agent(
+        name="Finalization Coordinator",
+         output_type=AgentOutputSchema(FinalPlanOutput, strict_json_schema=False),
+        instructions=system_prompt,
+    )
 
 
 def create_coordinator_agent(event_details: Dict[str, Any], required_agents: List[str], specialized_agents: Dict[str, Agent]) -> Agent:

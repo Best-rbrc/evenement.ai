@@ -1,5 +1,5 @@
-from agents import Agent, function_tool, WebSearchTool
-from workflows.schemas import schema_to_json_example
+from agents import Agent, function_tool, WebSearchTool, AgentOutputSchema
+from workflows.pydantic_schemas import CommunicationOutput
 
 @function_tool
 def create_invitation_design(event_name: str, event_type: str, event_date: str) -> str:
@@ -17,9 +17,13 @@ def create_communication_templates(event_type: str, communication_purpose: str) 
     return f"Created {communication_purpose} templates for {event_type} event"
 
 def create_communication_agent() -> Agent:
-    """Create a communication specialist agent."""
+    """Create a communication specialist agent.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Communication Specialist",
+         output_type=AgentOutputSchema(CommunicationOutput, strict_json_schema=False),
         instructions="""
         You are a professional communication specialist with expertise in:
         - Event marketing and promotion
@@ -40,9 +44,6 @@ def create_communication_agent() -> Agent:
         
         Always consider the target audience, event goals, and available communication channels.
         Use the available tools to create invitations, plan marketing, and create templates.
-        
-        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-""" + schema_to_json_example("communication") + """
         """,
         tools=[create_invitation_design, plan_marketing_campaign, create_communication_templates]
     )

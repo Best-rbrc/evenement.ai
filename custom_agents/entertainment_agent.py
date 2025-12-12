@@ -1,10 +1,14 @@
-from agents import Agent, function_tool, WebSearchTool
-from workflows.schemas import schema_to_json_example
+from agents import Agent, function_tool, WebSearchTool, AgentOutputSchema
+from workflows.pydantic_schemas import EntertainmentOutput
 
 def create_entertainment_agent() -> Agent:
-    """Create an entertainment specialist agent."""
+    """Create an entertainment specialist agent.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Entertainment Specialist",
+         output_type=AgentOutputSchema(EntertainmentOutput, strict_json_schema=False),
         instructions="""
         You are a professional entertainment coordinator with expertise in:
         - Entertainment vendor selection and management
@@ -24,8 +28,5 @@ def create_entertainment_agent() -> Agent:
         7. Backup entertainment and contingency plans
         
         Always consider guest demographics, event goals, and venue capabilities.
-        
-        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-""" + schema_to_json_example("entertainment") + """
         """
     )

@@ -105,12 +105,12 @@ IMPORTANT GUIDELINES:
         print("="*60)
         print("RESULTS")
         print("="*60)
-        print(f"\n✓ Selected agents: {', '.join(required_agents)}")
-        print(f"\n💡 Rationale: {planning_data.get('execution_order_rationale', 'N/A')}")
+        print(f"\n Selected agents: {', '.join(required_agents)}")
+        print(f"\n Rationale: {planning_data.get('execution_order_rationale', 'N/A')}")
         
         # Check if scheduling was selected
         has_scheduling = 'scheduling' in required_agents
-        print(f"\n{'✅' if has_scheduling else '❌'} Scheduling agent selected: {has_scheduling}")
+        print(f"\n{'' if has_scheduling else ''} Scheduling agent selected: {has_scheduling}")
         
         if has_scheduling:
             # Check placement
@@ -119,34 +119,34 @@ IMPORTANT GUIDELINES:
             speakers_idx = required_agents.index('speakers') if 'speakers' in required_agents else -1
             venue_idx = required_agents.index('venue') if 'venue' in required_agents else -1
             
-            print(f"\n📍 Agent order:")
+            print(f"\n Agent order:")
             for i, agent in enumerate(required_agents):
-                marker = "👉" if agent == 'scheduling' else "  "
+                marker = "" if agent == 'scheduling' else "  "
                 print(f"   {marker} {i+1}. {agent}")
             
             # Verify placement
             correct_placement = True
             if programme_idx >= 0 and scheduling_idx < programme_idx:
-                print(f"\n⚠️  Scheduling ({scheduling_idx}) should come AFTER programme ({programme_idx})")
+                print(f"\n  Scheduling ({scheduling_idx}) should come AFTER programme ({programme_idx})")
                 correct_placement = False
             if speakers_idx >= 0 and scheduling_idx < speakers_idx:
-                print(f"\n⚠️  Scheduling ({scheduling_idx}) should come AFTER speakers ({speakers_idx})")
+                print(f"\n  Scheduling ({scheduling_idx}) should come AFTER speakers ({speakers_idx})")
                 correct_placement = False
             if venue_idx >= 0 and scheduling_idx < venue_idx:
-                print(f"\n⚠️  Scheduling ({scheduling_idx}) should come AFTER venue ({venue_idx})")
+                print(f"\n  Scheduling ({scheduling_idx}) should come AFTER venue ({venue_idx})")
                 correct_placement = False
             
             if correct_placement:
-                print(f"\n✅ Scheduling agent correctly placed after dependencies!")
+                print(f"\n Scheduling agent correctly placed after dependencies!")
         else:
-            print(f"\n❌ PROBLEM: Scheduling agent NOT selected for multi-session conference!")
+            print(f"\n PROBLEM: Scheduling agent NOT selected for multi-session conference!")
             print(f"   Event has: 3 parallel tracks, 10 speakers, multiple sessions")
             print(f"   This SHOULD trigger scheduling agent usage!")
         
         return has_scheduling
         
     except json.JSONDecodeError as e:
-        print(f"\n❌ Failed to parse planning output: {e}")
+        print(f"\n Failed to parse planning output: {e}")
         print(f"\nRaw output:\n{result.final_output}")
         return False
 
@@ -203,15 +203,15 @@ Your task: Decide which agents are needed and output as JSON."""
         print("="*60)
         print("RESULTS")
         print("="*60)
-        print(f"\n✓ Selected agents: {', '.join(required_agents)}")
+        print(f"\n Selected agents: {', '.join(required_agents)}")
         
         has_scheduling = 'scheduling' in required_agents
-        print(f"\n{'⚠️' if has_scheduling else '✅'} Scheduling agent selected: {has_scheduling}")
+        print(f"\n{'' if has_scheduling else ''} Scheduling agent selected: {has_scheduling}")
         
         if not has_scheduling:
-            print(f"✅ CORRECT: Scheduling NOT needed for simple linear wedding event")
+            print(f" CORRECT: Scheduling NOT needed for simple linear wedding event")
         else:
-            print(f"❌ PROBLEM: Scheduling selected but not needed for simple wedding")
+            print(f" PROBLEM: Scheduling selected but not needed for simple wedding")
         
         return not has_scheduling
         
@@ -220,7 +220,7 @@ Your task: Decide which agents are needed and output as JSON."""
 
 
 if __name__ == "__main__":
-    print("🧪 Coordinator Agent Selection Test\n")
+    print(" Coordinator Agent Selection Test\n")
     
     test1 = test_conference_selection()
     test2 = test_wedding_selection()
@@ -228,10 +228,10 @@ if __name__ == "__main__":
     print("\n\n" + "="*60)
     print("SUMMARY")
     print("="*60)
-    print(f"Conference test (should select scheduling): {'✅ PASS' if test1 else '❌ FAIL'}")
-    print(f"Wedding test (should NOT select scheduling): {'✅ PASS' if test2 else '❌ FAIL'}")
+    print(f"Conference test (should select scheduling): {' PASS' if test1 else ' FAIL'}")
+    print(f"Wedding test (should NOT select scheduling): {' PASS' if test2 else ' FAIL'}")
     
     if test1 and test2:
-        print("\n🎉 All tests passed! Coordinator correctly identifies when to use scheduling.")
+        print("\n All tests passed! Coordinator correctly identifies when to use scheduling.")
     else:
-        print("\n⚠️  Some tests failed - coordinator may need prompt refinement.")
+        print("\n  Some tests failed - coordinator may need prompt refinement.")

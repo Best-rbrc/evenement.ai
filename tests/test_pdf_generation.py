@@ -241,7 +241,7 @@ Key success factors include early speaker confirmation, robust registration syst
     }
     
     # Generate PDF
-    print("\n📄 Generating PDF report...\n")
+    print("\n Generating PDF report...\n")
     
     try:
         pdf_path = generate_event_proposal_pdf(
@@ -250,13 +250,13 @@ Key success factors include early speaker confirmation, robust registration syst
             output_dir="event_outputs"
         )
         
-        print(f"✅ SUCCESS!")
-        print(f"\n📁 PDF Report Generated:")
+        print(f" SUCCESS!")
+        print(f"\n PDF Report Generated:")
         print(f"   Path: {pdf_path}")
-        print(f"\n💡 Open the file to view the professional event proposal.")
+        print(f"\n Open the file to view the professional event proposal.")
         
         # Display report structure
-        print(f"\n📋 Report Contents:")
+        print(f"\n Report Contents:")
         print(f"   1. Cover Page with Event Details")
         print(f"   2. Table of Contents")
         print(f"   3. Executive Summary")
@@ -271,18 +271,18 @@ Key success factors include early speaker confirmation, robust registration syst
         return True
         
     except Exception as e:
-        print(f"❌ FAILED: {e}")
+        print(f" FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
 
 
 if __name__ == "__main__":
-    print("🧪 PDF Report Generation Test\n")
+    print(" PDF Report Generation Test\n")
     
     success = test_pdf_generation()
     
     if success:
-        print("\n\n✅ Test completed successfully!")
+        print("\n\n Test completed successfully!")
     else:
-        print("\n\n❌ Test failed - check errors above")
+        print("\n\n Test failed - check errors above")

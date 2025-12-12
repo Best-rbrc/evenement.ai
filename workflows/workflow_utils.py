@@ -33,7 +33,7 @@ def copy_sandbox_files_to_project(sandbox_dir: Path, project_output_dir: Path):
             copied_count += 1
     
     if copied_count > 0:
-        print(f"✅ Copied {copied_count} file(s) from sandbox to {project_output_dir}")
+        print(f" Copied {copied_count} file(s) from sandbox to {project_output_dir}")
 
 
 def create_basic_schedule(event_details: Dict[str, Any]) -> Dict[str, Any]:

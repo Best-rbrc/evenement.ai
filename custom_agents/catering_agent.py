@@ -1,5 +1,5 @@
-from agents import Agent, function_tool, WebSearchTool
-from workflows.schemas import schema_to_json_example
+from agents import Agent, function_tool, WebSearchTool, AgentOutputSchema
+from workflows.pydantic_schemas import CateringOutput
 
 
 @function_tool
@@ -18,9 +18,13 @@ def get_catering_quote(caterer_name: str, menu_items: str, guest_count: int) -> 
     return f"Quote from {caterer_name} for {menu_items} serving {guest_count} guests"
 
 def create_catering_agent() -> Agent:
-    """Create a catering specialist agent."""
+    """Create a catering specialist agent.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
-        name="Catering Specialist", 
+        name="Catering Specialist",
+         output_type=AgentOutputSchema(CateringOutput, strict_json_schema=False),
         instructions="""
         You are a professional catering specialist with expertise in:
         - Menu planning and dietary requirements
@@ -49,9 +53,6 @@ def create_catering_agent() -> Agent:
         4. NO trailing commas
         5. Validate JSON syntax before returning
         6. NO extra text before or after JSON
-        
-        REQUIRED STRUCTURE:
-""" + schema_to_json_example("catering") + """
         
         ALWAYS include summary field - this is CRITICAL.
         """,

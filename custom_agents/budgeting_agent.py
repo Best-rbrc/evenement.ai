@@ -1,8 +1,8 @@
 """Budgeting agent with what-if scenario capabilities."""
-from agents import Agent, function_tool
+from agents import Agent, function_tool, AgentOutputSchema
 from typing import Dict, List, Any
 import json
-from workflows.schemas import schema_to_json_example
+from workflows.pydantic_schemas import BudgetingOutput
 
 
 @function_tool
@@ -387,9 +387,13 @@ def generate_cost_breakdown(
 
 
 def create_budgeting_agent() -> Agent:
-    """Create a budgeting specialist agent with what-if scenario capabilities."""
+    """Create a budgeting specialist agent with what-if scenario capabilities.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Budgeting Specialist",
+         output_type=AgentOutputSchema(BudgetingOutput, strict_json_schema=False),
         handoff_description="Manages comprehensive budget planning, allocation, validation, and what-if scenario analysis.",
         instructions="""
         You are a professional event budgeting specialist with expertise in:
@@ -456,9 +460,6 @@ def create_budgeting_agent() -> Agent:
         3. Use numbers (not strings) for numeric values
         4. NO trailing commas in JSON
         5. Validate JSON syntax before returning
-        
-        REQUIRED STRUCTURE:
-""" + schema_to_json_example("budgeting") + """
         
         ALWAYS include budget_allocation_recommended - this is CRITICAL.
         """,
