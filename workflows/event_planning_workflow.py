@@ -359,10 +359,10 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                 validated_output = dict(result.final_output)
             
             specialist_outputs[agent_name] = validated_output
-            print(f"    Output validated successfully (structured output)")
+            print(f"    ✅ Output validated successfully (structured output)")
             logger.info(f"Agent '{agent_name}' validation: SUCCESS (structured output)")
         except Exception as e:
-            print(f"  Output conversion error for {agent_name}: {e}")
+            print(f"  ❌ Output conversion error for {agent_name}: {e}")
             logger.warning(f"Agent '{agent_name}' conversion FAILED: {e}")
             print(f"   Storing raw output...")
             # Store as-is if conversion fails
@@ -379,7 +379,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                        agents=agent_statuses.copy(),
                        message=f"Completed {agent_name} specialist")
         
-        print(f" Complete\n")
+        print(f" ✅ Complete\n")
 
     # ============================================================
     # PHASE 3: COORDINATOR FINALIZATION
