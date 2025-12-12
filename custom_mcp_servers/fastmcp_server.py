@@ -29,10 +29,12 @@ Example Usage:
 from __future__ import annotations
 
 import asyncio
+import argparse
 import base64
 import builtins
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -294,8 +296,41 @@ def serve():
     Usage:
         python -m custom_mcp_servers.fastmcp_server
         # or
-        fastmcp-server  # if installed as a script
+        event-planner-mcp  # if installed as a script
     """
+    parser = argparse.ArgumentParser(
+        description="AI Event Planner MCP Server - Plan events using specialized AI agents",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Start the server (for MCP clients)
+  event-planner-mcp
+  
+  # Start with custom form mode
+  PLAN_EVENT_FORM_MODE=unsandboxed event-planner-mcp
+
+Environment Variables:
+  OPENAI_API_KEY       Required - Your OpenAI API key
+  TALLY_API_KEY        Optional - For form creation (if PLAN_EVENT_FORM_MODE=unsandboxed)
+  PLAN_EVENT_FORM_MODE Optional - "skip" (default), "unsandboxed", or "sandboxed"
+  
+For more information, see: https://github.com/Adrien-Z/AI-Event-Planner-Agent
+        """
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="event-planner-mcp 1.0.0"
+    )
+    
+    # Parse arguments (but MCP servers don't typically use CLI args, just --help)
+    args = parser.parse_args()
+    
+    # Check for required environment variables
+    if not os.getenv("OPENAI_API_KEY"):
+        print("Warning: OPENAI_API_KEY not set. The server may not work correctly.", file=sys.stderr)
+        print("Set it with: export OPENAI_API_KEY='sk-proj-...'", file=sys.stderr)
+    
     logger.info("Starting FastMCP Event Planner server...")
     logger.info(f"Output directory: {_OUTPUT_DIR}")
     logger.info(f"Form mode: {os.getenv('PLAN_EVENT_FORM_MODE', 'skip')}")
