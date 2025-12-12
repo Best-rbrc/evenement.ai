@@ -115,7 +115,7 @@ def refine_event_plan(
             continue
         
         logger.info(f"[{idx}/{len(agents_to_call)}] Calling {agent_name} agent for refinement...")
-        print(f"[{idx}/{len(agents_to_call)}] 🎯 Updating {agent_name}...")
+        print(f"[{idx}/{len(agents_to_call)}]  Updating {agent_name}...")
         
         # Build specialist prompt with user's request and current context
         specialist_prompt = build_specialist_prompt(
@@ -135,11 +135,11 @@ def refine_event_plan(
             validated_output = validate_agent_output(agent_name, result.final_output)
             updated_outputs[agent_name] = validated_output
             changed_sections.append(agent_name)
-            logger.info(f"✅ {agent_name} agent updated successfully")
-            print(f"   ✅ {agent_name} updated")
+            logger.info(f" {agent_name} agent updated successfully")
+            print(f"    {agent_name} updated")
         except Exception as e:
-            logger.error(f"❌ Error updating {agent_name}: {e}")
-            print(f"   ⚠️  {agent_name} update failed: {e}")
+            logger.error(f" Error updating {agent_name}: {e}")
+            print(f"     {agent_name} update failed: {e}")
             # Keep existing output if update fails
             continue
     
@@ -167,7 +167,7 @@ def refine_event_plan(
     
     # Regenerate final plan with updated outputs
     logger.info("Regenerating final plan with updated outputs...")
-    print("🔄 Regenerating final plan...")
+    print(" Regenerating final plan...")
     
     # Update required_agents to include any new agents that were called
     updated_required_agents = list(set(required_agents + agents_to_call))
@@ -184,11 +184,11 @@ def refine_event_plan(
         # Validate final plan
         try:
             updated_plan = validate_agent_output("final_plan", final_result.final_output, required_agents=updated_required_agents)
-            logger.info("✅ Final plan regenerated successfully")
-            print("✅ Final plan regenerated")
+            logger.info(" Final plan regenerated successfully")
+            print(" Final plan regenerated")
         except Exception as e:
-            logger.error(f"❌ Error validating final plan: {e}")
-            print(f"⚠️  Validation warning: {e}")
+            logger.error(f" Error validating final plan: {e}")
+            print(f"  Validation warning: {e}")
             # Try to parse anyway
             try:
                 updated_plan = json.loads(final_result.final_output)
@@ -202,8 +202,8 @@ def refine_event_plan(
                     if agent_name in updated_outputs:
                         updated_plan["recommendations"][agent_name] = updated_outputs[agent_name]
     except Exception as e:
-        logger.error(f"❌ Error regenerating final plan: {e}")
-        print(f"⚠️  Error regenerating plan: {e}")
+        logger.error(f" Error regenerating final plan: {e}")
+        print(f"  Error regenerating plan: {e}")
         # Fallback: merge changes into current plan
         updated_plan = current_plan.copy()
         if "recommendations" not in updated_plan:

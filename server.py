@@ -292,7 +292,7 @@ IMPORTANT RULES:
         server_logger.error(f"JSON decode failed: {exc}")
         server_logger.error(f"Raw message content: {response.choices[0].message.content if 'response' in locals() else 'N/A'}")
         server_logger.error("=" * 80)
-        print(f"\n❌ JSON decode error: {exc}")
+        print(f"\n JSON decode error: {exc}")
         print(f"   Raw content: {response.choices[0].message.content if 'response' in locals() else 'N/A'}")
         raise HTTPException(status_code=500, detail="Failed to parse AI response as JSON")
     except Exception as exc:
@@ -301,7 +301,7 @@ IMPORTANT RULES:
         server_logger.error(f"Voice dictation error: {exc}")
         server_logger.error(error_trace)
         server_logger.error("=" * 80)
-        print(f"\n❌ Voice dictation error: {exc}")
+        print(f"\n Voice dictation error: {exc}")
         print(error_trace)
         print("=" * 80)
         raise HTTPException(status_code=500, detail=f"Failed to process voice input: {str(exc)}")
@@ -338,18 +338,18 @@ async def create_plan(payload: EventRequest) -> PlanResponse:
         _current_progress["status"] = "error"
         _current_progress["message"] = str(exc)
         import traceback
-        print(f"\n⚠️  Workflow error: {exc}")
+        print(f"\n  Workflow error: {exc}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(exc))
 
     response = PlanResponse(status="ok", event_details=event_details, result=result)
     
     # Log what's being sent to frontend
-    print(f"\n📤 SERVER: Sending response to frontend:")
-    print(f"   📊 event_schedule: {len(result.get('event_schedule', ''))} chars")
-    print(f"   🎭 entertainment: {len(result.get('entertainment', ''))} chars")
-    print(f"   📄 event_schedule preview: {result.get('event_schedule', '')[:200]}...")
-    print(f"   🎭 entertainment preview: {result.get('entertainment', '')[:200]}...")
+    print(f"\n SERVER: Sending response to frontend:")
+    print(f"    event_schedule: {len(result.get('event_schedule', ''))} chars")
+    print(f"    entertainment: {len(result.get('entertainment', ''))} chars")
+    print(f"    event_schedule preview: {result.get('event_schedule', '')[:200]}...")
+    print(f"    entertainment preview: {result.get('entertainment', '')[:200]}...")
     
     server_logger.info("="*80)
     server_logger.info("Response sent to frontend:")
@@ -399,10 +399,10 @@ async def refine_plan(payload: RefinePlanRequest) -> RefinePlanResponse:
     global _current_progress
     
     server_logger.info("="*80)
-    server_logger.info("💬 /api/refine-plan called")
+    server_logger.info(" /api/refine-plan called")
     server_logger.info(f"User message: {payload.message}")
     server_logger.info(f"Changed sections expected: {payload.changed_sections if hasattr(payload, 'changed_sections') else 'N/A'}")
-    print(f"\n💬 /api/refine-plan endpoint called")
+    print(f"\n /api/refine-plan endpoint called")
     print(f"   User message: {payload.message}")
     
     # Initialize progress tracking
@@ -434,10 +434,10 @@ async def refine_plan(payload: RefinePlanRequest) -> RefinePlanResponse:
         _current_progress["phase"] = "complete"
         _current_progress["message"] = f"Updated {', '.join(result.get('changed_sections', []))} based on your request"
         
-        server_logger.info("✅ Refinement completed successfully")
+        server_logger.info(" Refinement completed successfully")
         server_logger.info(f"   Changed sections: {result.get('changed_sections', [])}")
         server_logger.info(f"   Agents called: {result.get('agents_called', [])}")
-        print(f"✅ Refinement completed")
+        print(f" Refinement completed")
         print(f"   Changed sections: {result.get('changed_sections', [])}")
         print(f"   Agents called: {result.get('agents_called', [])}")
         
@@ -452,17 +452,17 @@ async def refine_plan(payload: RefinePlanRequest) -> RefinePlanResponse:
     except asyncio.TimeoutError:
         _current_progress["status"] = "error"
         _current_progress["message"] = "Refinement timed out after 5 minutes"
-        server_logger.error("❌ Refinement timed out")
-        print("\n❌ Refinement timed out after 5 minutes")
+        server_logger.error(" Refinement timed out")
+        print("\n Refinement timed out after 5 minutes")
         raise HTTPException(status_code=504, detail="Refinement request timed out. Please try again with a more specific request.")
     except Exception as exc:
         _current_progress["status"] = "error"
         _current_progress["message"] = str(exc)
         import traceback
         error_trace = traceback.format_exc()
-        server_logger.error(f"❌ Refinement error: {exc}")
+        server_logger.error(f" Refinement error: {exc}")
         server_logger.error(error_trace)
-        print(f"\n❌ Refinement error: {exc}")
+        print(f"\n Refinement error: {exc}")
         print(error_trace)
         raise HTTPException(status_code=500, detail=f"Failed to refine plan: {str(exc)}")
 
