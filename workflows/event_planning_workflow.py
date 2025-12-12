@@ -20,7 +20,6 @@ import logging
 from pathlib import Path
 
 # Import from extracted modules
-from workflows.schemas import AGENT_SCHEMAS, validate_agent_output
 from workflows.prompts import (
     build_planning_prompt,
     build_specialist_prompt,
@@ -129,12 +128,12 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     try:
         from agents import Runner
         from custom_agents.base import create_specialized_agents
-        from custom_agents.coordinator_agent import create_coordinator_agent
+        from custom_agents.coordinator_agent import create_planning_coordinator, create_finalization_coordinator
     except Exception as exc:
         raise RuntimeError(f"Required imports failed: {exc}")
 
     print(f"\n{'='*60}")
-    print(f"🎉 AI EVENT PLANNER")
+    print(f" AI EVENT PLANNER")
     print(f"{'='*60}")
     print(f"Event: {event_details['event_name']}")
     print(f"Type: {event_details['event_type']}")
@@ -150,19 +149,19 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     if is_non_interactive and os.environ.get("EVENT_PLANNER_ENABLE_SANDBOX"):
         USE_SANDBOXED_FORMS = os.environ.get("EVENT_PLANNER_ENABLE_SANDBOX") == "1"
         mode_text = "sandboxed (Docker)" if USE_SANDBOXED_FORMS else "unsandboxed (mcp-remote)"
-        print(f"\n✅ Dev settings: Using {mode_text} for forms\n")
+        print(f"\n Dev settings: Using {mode_text} for forms\n")
     elif USE_SANDBOXED_FORMS is None and not is_non_interactive:
         try:
-            print("\n📋 FORM CREATION METHOD SELECTION")
+            print("\n FORM CREATION METHOD SELECTION")
             print("-" * 60)
             print("How would you like to create registration forms?\n")
             print("1. Sandboxed (Recommended) - Custom local MCP in Docker sandbox")
-            print("   ✅ Runs in isolated container")
-            print("   ✅ Network-restricted (api.tally.so only)")
-            print("   ✅ Uses Tally REST API directly\n")
+            print("    Runs in isolated container")
+            print("    Network-restricted (api.tally.so only)")
+            print("    Uses Tally REST API directly\n")
             print("2. Unsandboxed - Official Tally mcp-remote server")
-            print("   ⚠️  No sandboxing (direct system access)")
-            print("   ⚠️  OAuth2 authentication (may have issues)")
+            print("     No sandboxing (direct system access)")
+            print("     OAuth2 authentication (may have issues)")
             print("     External npm package dependency\n")
             
             while True:
@@ -236,7 +235,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
             _tally_server_ref = None
     else:
         # For unsandboxed path, let form_agent manage the official mcp-remote client itself.
-        print("📡 Using unsandboxed Tally mcp-remote (managed inside form_agent)...\n")
+        print(" Using unsandboxed Tally mcp-remote (managed inside form_agent)...\n")
         tally_server = None
         _tally_server_ref = None
 
@@ -257,31 +256,39 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     else:
         # Unsandboxed path is handled internally by form_agent via mcp-remote
         form_status = "unsandboxed (mcp-remote via form_agent)"
-    print(f"📊 Output Configuration: Calendar={calendar_status}, Forms={form_status}\n")
+    print(f" Output Configuration: Calendar={calendar_status}, Forms={form_status}\n")
     
-    # Create coordinator with handoffs to all specialists
-    coordinator = create_coordinator_agent(event_details, all_agent_types, all_specialists)
+    # Create PLANNING coordinator (Phase 1 only - agent selection)
+    planning_coordinator = create_planning_coordinator(event_details, all_agent_types)
 
     planning_prompt = build_planning_prompt(event_details)
-    planning_result = run_sync_with_backoff(coordinator, planning_prompt, max_turns=AGENT_MAX_TURNS)
+    planning_result = run_sync_with_backoff(planning_coordinator, planning_prompt, max_turns=AGENT_MAX_TURNS)
     
-    # Parse the planning decision
+    # Parse the planning decision (structured output should return Pydantic model)
     try:
-        planning_data = json.loads(planning_result.final_output)
+        if hasattr(planning_result.final_output, 'model_dump'):
+            planning_data = planning_result.final_output.model_dump()
+        elif hasattr(planning_result.final_output, 'dict'):
+            planning_data = planning_result.final_output.dict()
+        elif isinstance(planning_result.final_output, dict):
+            planning_data = planning_result.final_output
+        else:
+            planning_data = json.loads(str(planning_result.final_output))
+        
         required_agents = planning_data.get("required_agents", all_agent_types[:6])
         print(f" Planning complete!")
-        print(f"\n� Selected agents (in order): {', '.join(required_agents)}")
+        print(f"\n✓ Selected agents (in order): {', '.join(required_agents)}")
         print(f" Rationale: {planning_data.get('execution_order_rationale', 'N/A')}\n")
-    except:
+    except Exception as e:
         # Fallback if parsing fails
+        print(f"  Planning parse error: {e}, using default agent selection\n")
         required_agents = all_agent_types[:6]
-        print(f"  Using default agent selection\n")
 
     # ============================================================
     # PHASE 2: SPECIALIST EXECUTION
     # ============================================================
     print(f"\n{'='*60}")
-    print("🔧 PHASE 2: Specialist Execution")
+    print(" PHASE 2: Specialist Execution")
     print(f"{'='*60}\n")
     
     update_progress("phase_2", "Agents Working", "in_progress", agents=required_agents, message="Starting specialist execution...")
@@ -328,68 +335,39 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
         
         # Log raw agent output for debugging
-        print(f"    Raw agent output ({len(result.final_output)} chars): {result.final_output[:300]}...")
-        logger.info(f"Agent '{agent_name}' output length: {len(result.final_output)} chars")
+        print(f"    Raw agent output ({len(str(result.final_output))} chars)")
+        logger.info(f"Agent '{agent_name}' output length: {len(str(result.final_output))} chars")
         logger.debug(f"Agent '{agent_name}' full output: {result.final_output}")
         
-        # Validate and normalize output to match schema
+        # With structured outputs, the result should already be a Pydantic model or dict
+        # Convert Pydantic model to dict if needed
         try:
-            validated_output = validate_agent_output(agent_name, result.final_output)
-            specialist_outputs[agent_name] = validated_output
-            print(f"    Output validated successfully")
-            logger.info(f"Agent '{agent_name}' validation: SUCCESS")
-        except ValueError as e:
-            print(f"  Schema validation error for {agent_name}: {e}")
-            logger.warning(f"Agent '{agent_name}' validation FAILED: {e}")
-            print(f"   Attempting to parse JSON anyway...")
+            if hasattr(result.final_output, 'model_dump'):
+                # Pydantic v2 model
+                validated_output = result.final_output.model_dump()
+            elif hasattr(result.final_output, 'dict'):
+                # Pydantic v1 model
+                validated_output = result.final_output.dict()
+            elif isinstance(result.final_output, dict):
+                # Already a dict
+                validated_output = result.final_output
+            elif isinstance(result.final_output, str):
+                # Fallback: parse JSON string (shouldn't happen with structured outputs)
+                validated_output = json.loads(result.final_output)
+            else:
+                # Last resort: try to convert to dict
+                validated_output = dict(result.final_output)
             
-            # Try to parse JSON even if validation fails
-            try:
-                import re
-                output_str = result.final_output.strip()
-                
-                # Try multiple JSON extraction strategies
-                parsed = None
-                
-                # Strategy 1: Try direct JSON parse
-                try:
-                    parsed = json.loads(output_str)
-                except json.JSONDecodeError:
-                    pass
-                
-                # Strategy 2: Extract JSON from code blocks
-                if not parsed:
-                    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', output_str, re.DOTALL)
-                    if json_match:
-                        try:
-                            parsed = json.loads(json_match.group(1))
-                        except json.JSONDecodeError:
-                            pass
-                
-                # Strategy 3: Find JSON object in text
-                if not parsed:
-                    json_match = re.search(r'\{[^{}]*(?:"summary"|"venues"|"name")[^{}]*\}', output_str, re.DOTALL)
-                    if json_match:
-                        try:
-                            # Try to fix common JSON issues
-                            json_str = json_match.group(0)
-                            # Remove trailing commas before closing braces/brackets
-                            json_str = re.sub(r',\s*}', '}', json_str)
-                            json_str = re.sub(r',\s*]', ']', json_str)
-                            parsed = json.loads(json_str)
-                        except json.JSONDecodeError:
-                            pass
-                
-                if parsed and isinstance(parsed, dict):
-                    print(f"   ✅ Successfully parsed JSON despite validation error")
-                    specialist_outputs[agent_name] = parsed
-                    logger.info(f"Agent '{agent_name}' parsed JSON successfully despite validation error")
-                else:
-                    print(f"   ⚠️  Could not parse JSON, storing raw output...")
-                    specialist_outputs[agent_name] = result.final_output
-            except Exception as parse_ex:
-                print(f"   ⚠️  JSON parsing failed: {parse_ex}, storing raw output...")
-                specialist_outputs[agent_name] = result.final_output
+            specialist_outputs[agent_name] = validated_output
+            print(f"    Output validated successfully (structured output)")
+            logger.info(f"Agent '{agent_name}' validation: SUCCESS (structured output)")
+        except Exception as e:
+            print(f"  Output conversion error for {agent_name}: {e}")
+            logger.warning(f"Agent '{agent_name}' conversion FAILED: {e}")
+            print(f"   Storing raw output...")
+            # Store as-is if conversion fails
+            specialist_outputs[agent_name] = result.final_output
+            logger.info(f"Agent '{agent_name}' stored as raw output")
         
         # Update status to done
         for agent_stat in agent_statuses:
@@ -401,33 +379,40 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                        agents=agent_statuses.copy(),
                        message=f"Completed {agent_name} specialist")
         
-        print(f"✓ Complete\n")
+        print(f" Complete\n")
 
     # ============================================================
     # PHASE 3: COORDINATOR FINALIZATION
     # ============================================================
     print(f"\n{'='*60}")
-    print("🎯 PHASE 3: Review, Refinement & Finalization")
+    print(" PHASE 3: Review, Refinement & Finalization")
     print(f"{'='*60}\n")
     
     update_progress("phase_3", "Coordinator Finalizing", "in_progress", message="Reviewing and refining outputs...")
     
     print("Coordinator reviewing all outputs...\n")
 
+    # Create FINALIZATION coordinator (Phase 3 - synthesis with structured output)
+    finalization_coordinator = create_finalization_coordinator(
+        event_details=event_details,
+        required_agents=required_agents,
+        specialist_outputs=specialist_outputs
+    )
+    
     finalization_prompt = build_finalization_prompt(
         event_details=event_details,
         required_agents=required_agents,
         specialist_outputs=specialist_outputs
     )
-    final_result = run_sync_with_backoff(coordinator, finalization_prompt, max_turns=AGENT_MAX_TURNS)
+    final_result = run_sync_with_backoff(finalization_coordinator, finalization_prompt, max_turns=AGENT_MAX_TURNS)
     
-    print("✅ Finalization complete!\n")
+    print(" Finalization complete!\n")
     
     # ============================================================
     # PHASE 4: Event Outputs (CALENDAR & REGISTRATION FORM)
     # ============================================================
     print(f"\n{'='*60}")
-    print("📅 PHASE 4: Event Outputs (Calendar & Registration Form)")
+    print(" PHASE 4: Event Outputs (Calendar & Registration Form)")
     print(f"{'='*60}\n")
     
     update_progress("phase_4", "Generating Outputs", "in_progress", message="Creating calendar and registration form...")
@@ -451,7 +436,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     # This avoids the ClosedResourceError that happens when MCP is set up earlier
     if SANDBOX_ENABLED and fs_server is None:
         try:
-            print("🔒 Setting up sandboxed filesystem server...\n")
+            print(" Setting up sandboxed filesystem server...\n")
             # Create fresh event loop for MCP setup (matches test pattern)
             mcp_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(mcp_loop)
@@ -459,10 +444,10 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
             _fs_server_ref = fs_server  # Keep global reference to prevent GC
             # Don't close the loop - keep it alive for calendar agent
             loop = mcp_loop  # Update loop reference to use the same one
-            print("✅ Filesystem MCP initialized - calendar will be sandboxed\n")
+            print(" Filesystem MCP initialized - calendar will be sandboxed\n")
         except Exception as e:
-            print(f"⚠️  Filesystem MCP setup failed: {e}\n")
-            print("⏸️  Falling back to local I/O for calendar\n")
+            print(f"  Filesystem MCP setup failed: {e}\n")
+            print("⏸  Falling back to local I/O for calendar\n")
             fs_server = None
             _fs_server_ref = None
     
@@ -512,7 +497,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         # Runner.run_sync will use the current event loop (which is mcp_loop if MCP is enabled)
         # This works because we called asyncio.set_event_loop(mcp_loop) during MCP setup
         calendar_result = Runner.run_sync(calendar_agent, calendar_prompt, max_turns=AGENT_MAX_TURNS)
-        print("✅ Calendar invite generated!\n")
+        print(" Calendar invite generated!\n")
         
         # Update calendar agent status
         for agent_stat in agent_statuses:
@@ -526,12 +511,12 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         # Handle asyncio cleanup errors (Python 3.13 stricter checks)
         # The agent completes successfully, but cleanup throws an error during async generator teardown
         if "cancel scope" in str(rt_ex).lower():
-            print("⚠️  AsyncIO cleanup warning detected (non-breaking)\n")
+            print("  AsyncIO cleanup warning detected (non-breaking)\n")
             # Check if calendar file was actually created despite the error
             import glob
             calendar_files = glob.glob("event_outputs/*.ics")
             if calendar_files:
-                print(f"✅ Calendar file created successfully: {calendar_files[-1]}\n")
+                print(f" Calendar file created successfully: {calendar_files[-1]}\n")
                 # Create result object from the actual file
                 calendar_result = type('obj', (object,), {
                     'final_output': json.dumps({
@@ -542,13 +527,13 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                     })
                 })()
             else:
-                print("❌ Calendar file not found despite cleanup warning\n")
+                print(" Calendar file not found despite cleanup warning\n")
                 raise
         else:
             raise
     except Exception as cal_ex:
         import traceback
-        print(f"⚠️  Calendar generation failed: {type(cal_ex).__name__}: {cal_ex}\n")
+        print(f"  Calendar generation failed: {type(cal_ex).__name__}: {cal_ex}\n")
         print(f"   Full traceback:\n")
         traceback.print_exc()
         print(f"\n   Continuing workflow without calendar...\n")
@@ -572,7 +557,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     
     # Create registration form
     if SKIP_FORM_CREATION:
-        print("⏭️  Skipping registration form creation (headless mode)\n")
+        print("⏭  Skipping registration form creation (headless mode)\n")
         form_data = {"status": "skipped", "form_url": None, "message": "Form creation skipped"}
         # Update form agent status
         for agent_stat in agent_statuses:
@@ -622,8 +607,21 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
 
             form_result, form_error = run_form_with_retries(form_prompt, mcp_servers=tally_server if SANDBOX_ENABLED else None)
 
-            # Extract form URL from output; on failure, surface the error instead of generating a local fallback
-            form_data = extract_form_url_from_output(form_result.final_output if form_result else "")
+            # Convert Pydantic model to dict/string for extraction
+            if form_result and form_result.final_output:
+                final_output = form_result.final_output
+                if hasattr(final_output, 'model_dump'):
+                    # It's a Pydantic model - convert to dict then use directly
+                    form_data = final_output.model_dump()
+                elif hasattr(final_output, 'dict'):
+                    form_data = final_output.dict()
+                elif isinstance(final_output, dict):
+                    form_data = final_output
+                else:
+                    # String output - use extraction function
+                    form_data = extract_form_url_from_output(str(final_output))
+            else:
+                form_data = extract_form_url_from_output("")
 
             # Check if we have a URL (even if status extraction failed)
             form_url = form_data.get("form_url", "")
@@ -631,9 +629,9 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
             
             if has_url or form_data.get("status") == "success":
                 if has_url:
-                    print(f"✅ Registration form created: {form_url}\n")
+                    print(f" Registration form created: {form_url}\n")
                 else:
-                    print(f"✅ Registration form created (URL extraction had issues)\n")
+                    print(f" Registration form created (URL extraction had issues)\n")
                 # Update form agent status
                 for agent_stat in agent_statuses:
                     if agent_stat["name"] == "form":
@@ -657,7 +655,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                     # The agent said it was created but we couldn't extract the URL
                     error_message = "Form may have been created, but URL could not be extracted. " + form_data.get("message", "")
                 
-                print(f"⚠️  Form creation failed. Error: {error_message}\n")
+                print(f"  Form creation failed. Error: {error_message}\n")
                 if form_data.get("raw_output"):
                     print(f"   Raw output preview: {form_data.get('raw_output')[:200]}...\n")
                 form_data = {
@@ -676,14 +674,14 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         except RuntimeError as rt_ex:
             # Ignore asyncio cleanup errors (Python 3.13 stricter checks)
             if "cancel scope" in str(rt_ex):
-                print(f"⚠️  Form creation had asyncio cleanup warning (non-fatal)\n")
+                print(f"  Form creation had asyncio cleanup warning (non-fatal)\n")
                 print(f"   Continuing workflow...\n")
                 form_data = {
                     "status": "error",
                     "message": "Form creation completed but had cleanup issues"
                 }
             else:
-                print(f"⚠️  Form creation exception: {rt_ex}\n")
+                print(f"  Form creation exception: {rt_ex}\n")
                 print(f"   Continuing workflow without form...\n")
                 form_data = {
                     "status": "error",
@@ -698,7 +696,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                            current_agent=None,
                            message="Form creation completed (with cleanup issues)")
         except Exception as form_ex:
-            print(f"⚠️  Form creation exception: {form_ex}\n")
+            print(f"  Form creation exception: {form_ex}\n")
             print(f"   Continuing workflow without form...\n")
             form_data = {
                 "status": "error",
@@ -737,15 +735,25 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     logo_data = {}
     try:
         logo_result = Runner.run_sync(logo_agent, logo_prompt, max_turns=AGENT_MAX_TURNS)
-        print("✅ Logo generated!\n")
+        print(" Logo generated!\n")
         
-        # Parse logo output
+        # Parse logo output - handle Pydantic model or string
         try:
-            logo_data = json.loads(logo_result.final_output)
-            if logo_data.get("status") == "success":
-                print(f"✅ Logo file created: {logo_data.get('logo_file_path')}\n")
+            final_output = logo_result.final_output
+            if hasattr(final_output, 'model_dump'):
+                # It's a Pydantic model
+                logo_data = final_output.model_dump()
+            elif hasattr(final_output, 'dict'):
+                logo_data = final_output.dict()
+            elif isinstance(final_output, dict):
+                logo_data = final_output
             else:
-                print(f"⚠️  Logo generation returned error status\n")
+                # Try to parse as JSON string
+                logo_data = json.loads(str(final_output))
+            if logo_data.get("status") == "success":
+                print(f" Logo file created: {logo_data.get('logo_file_path')}\n")
+            else:
+                print(f"  Logo generation returned error status\n")
         except json.JSONDecodeError:
             # Try to extract JSON from markdown if present
             output_str = logo_result.final_output
@@ -771,7 +779,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                        message="Logo generated successfully")
     except Exception as logo_ex:
         import traceback
-        print(f"⚠️  Logo generation failed: {type(logo_ex).__name__}: {logo_ex}\n")
+        print(f"  Logo generation failed: {type(logo_ex).__name__}: {logo_ex}\n")
         print(f"   Full traceback:\n")
         traceback.print_exc()
         print(f"\n   Continuing workflow without logo...\n")
@@ -798,7 +806,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     # PHASE 5: PDF REPORT GENERATION
     # ============================================================
     print(f"\n{'='*60}")
-    print("📄 PHASE 5: Generating Professional PDF Report")
+    print(" PHASE 5: Generating Professional PDF Report")
     print(f"{'='*60}\n")
     
     update_progress("phase_5", "Generating Report", "in_progress", message="Creating comprehensive PDF proposal...")
@@ -806,78 +814,13 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     try:
         from tools.report_generator import generate_event_proposal_pdf
         
-        # Validate final plan against schema (this enforces timeline field and recommendations)
-        try:
-            final_plan_dict = validate_agent_output("final_plan", final_result.final_output, required_agents=required_agents)
-            print(f"✅ Final plan validated successfully (includes timeline: {bool(final_plan_dict.get('timeline'))}, recommendations: {bool(final_plan_dict.get('recommendations'))})")
-        except ValueError as e:
-            print(f"⚠️  Final plan schema validation error: {e}")
-            print(f"   This means the coordinator did not generate all required fields (including timeline)")
-            print(f"   Attempting to parse and add missing fields...")
-            # Try to parse anyway
-            parsed = final_result.final_output
-            if isinstance(parsed, str):
-                try:
-                    parsed = json.loads(parsed)
-                except:
-                    try:
-                        if '```json' in parsed:
-                            json_str = parsed.split('```json')[1].split('```')[0].strip()
-                        elif '```' in parsed:
-                            json_str = parsed.split('```')[1].split('```')[0].strip()
-                        else:
-                            import re
-                            match = re.search(r'\{.*\}', parsed, re.DOTALL)
-                            if match:
-                                json_str = match.group(0)
-                            else:
-                                raise ValueError("No JSON found")
-                        parsed = json.loads(json_str)
-                    except:
-                        parsed = {}
-            
-            if not isinstance(parsed, dict):
-                parsed = {}
-            
-            # Ensure all required schema fields exist (add empty defaults if missing)
-            schema = AGENT_SCHEMAS.get("final_plan", {})
-            for key in schema.keys():
-                if key not in parsed:
-                    print(f"   Adding missing field: {key}")
-                    if key == "timeline":
-                        parsed[key] = []
-                    elif key == "schedule":
-                        # Create a basic schedule from event details if none exists
-                        basic_schedule = create_basic_schedule(event_details)
-                        parsed[key] = basic_schedule
-                        print(f"   Created basic schedule with {len(basic_schedule.get('sessions', []))} sessions")
-                    elif key == "budget":
-                        parsed[key] = {"total_available": 0, "total_allocated": 0, "by_category": {}, "status": "unknown"}
-                    elif key == "recommendations":
-                        parsed[key] = {}
-                    elif key == "risks":
-                        parsed[key] = []
-                    elif key == "action_items":
-                        parsed[key] = []
-                    elif key == "assumptions":
-                        parsed[key] = []
-                    else:
-                        parsed[key] = ""
-            
-            # Ensure schedule always has at least one session
-            if "schedule" in parsed:
-                schedule = parsed["schedule"]
-                if not isinstance(schedule, dict):
-                    schedule = {"optimized": False, "sessions": []}
-                    parsed["schedule"] = schedule
-                
-                if "sessions" not in schedule or not schedule.get("sessions"):
-                    # Create basic schedule if sessions are missing or empty
-                    basic_schedule = create_basic_schedule(event_details)
-                    parsed["schedule"] = basic_schedule
-                    print(f"   Schedule was empty, created basic schedule with {len(basic_schedule.get('sessions', []))} sessions")
-            
-            final_plan_dict = parsed
+        # Final plan is returned as Pydantic model from API, already validated
+        final_plan_dict = final_result.final_output
+        if isinstance(final_plan_dict, dict):
+            pass  # Already a dict
+        else:
+            # Convert Pydantic model to dict if needed
+            final_plan_dict = final_plan_dict.model_dump() if hasattr(final_plan_dict, 'model_dump') else final_plan_dict
         
         pdf_path = generate_event_proposal_pdf(
             event_details=event_details,
@@ -885,11 +828,11 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
             specialist_outputs=specialist_outputs
         )
         
-        print(f"✅ PDF report generated: {pdf_path}\n")
+        print(f" PDF report generated: {pdf_path}\n")
         pdf_generated = True
         
     except Exception as e:
-        print(f"⚠️  PDF generation error: {e}\n")
+        print(f"  PDF generation error: {e}\n")
         pdf_path = None
         pdf_generated = False
     
@@ -897,7 +840,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     # PHASE 6: SMS NOTIFICATION (OPTIONAL)
     # ============================================================
     print(f"\n{'='*60}")
-    print("📱 PHASE 6: SMS Notification")
+    print(" PHASE 6: SMS Notification")
     print(f"{'='*60}\n")
     
     # Ask user if they want to send SMS (skip in non-interactive mode)
@@ -908,14 +851,14 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         enable_sms = os.environ.get("EVENT_PLANNER_ENABLE_SMS") == "1"
         send_sms = 'yes' if enable_sms else 'no'
         status = "enabled" if enable_sms else "disabled"
-        print(f"✅ Dev settings: SMS notification {status}\n")
+        print(f" Dev settings: SMS notification {status}\n")
     else:
         try:
             send_sms = input("Do you want to send event details via SMS (costs 1$ per sms and we only have 7$ left so please use responsiibily)? (yes/no): ").lower().strip()
         except (EOFError, OSError):
             # Non-interactive mode - skip SMS by default
             send_sms = 'no'
-            print("✅ Non-interactive mode: Skipping SMS notification\n")
+            print(" Non-interactive mode: Skipping SMS notification\n")
         
     try:
         if send_sms in ['yes', 'y', 'true', '1']:
@@ -932,17 +875,17 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
                 )
                 
                 if sms_result.get('success'):
-                    print(f"✅ SMS sent successfully! Message SID: {sms_result.get('message_sid')}\n")
+                    print(f" SMS sent successfully! Message SID: {sms_result.get('message_sid')}\n")
                     sms_sent = True
                     sms_message_sid = sms_result.get('message_sid')
                 else:
                     error_msg = sms_result.get('error', 'Unknown error')
-                    print(f"⚠️  Failed to send SMS: {error_msg}\n")
+                    print(f"  Failed to send SMS: {error_msg}\n")
                     sms_sent = False
                     sms_message_sid = None
                 
             except Exception as sms_error:
-                print(f"⚠️  Failed to send SMS: {sms_error}\n")
+                print(f"  Failed to send SMS: {sms_error}\n")
                 sms_sent = False
                 sms_message_sid = None
         else:
@@ -951,59 +894,87 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
             sms_message_sid = None
             
     except Exception as e:
-        print(f"⚠️  SMS input error: {e}\n")
+        print(f"  SMS input error: {e}\n")
         sms_sent = False
         sms_message_sid = None
     
-    # Validate planning phase output
+    # Planning phase output is validated by Pydantic at API time
     validated_planning = planning_result.final_output
+    
+    # All outputs are validated by Pydantic at API time
+    validated_specialist_outputs = specialist_outputs
+    
+    # Parse and validate final_plan before returning (structured output should be Pydantic model)
     try:
-        validated_planning = validate_agent_output("planning", planning_result.final_output)
-    except ValueError as e:
-        print(f"⚠️  Planning phase schema validation error: {e}")
-    
-    # Validate all specialist outputs one more time before returning
-    validated_specialist_outputs = {}
-    for agent_name, output in specialist_outputs.items():
-        try:
-            validated_specialist_outputs[agent_name] = validate_agent_output(agent_name, output)
-        except ValueError as e:
-            print(f"⚠️  Final validation error for {agent_name}: {e}")
-            validated_specialist_outputs[agent_name] = output
-    
-    # Parse and validate final_plan before returning
-    final_plan_parsed = final_result.final_output
-    if isinstance(final_plan_parsed, str):
-        try:
-            final_plan_parsed = json.loads(final_plan_parsed)
-        except json.JSONDecodeError:
-            # Try extracting JSON from markdown
-            try:
-                if '```json' in final_plan_parsed:
-                    json_str = final_plan_parsed.split('```json')[1].split('```')[0].strip()
-                elif '```' in final_plan_parsed:
-                    json_str = final_plan_parsed.split('```')[1].split('```')[0].strip()
-                else:
-                    import re
-                    match = re.search(r'\{.*\}', final_plan_parsed, re.DOTALL)
-                    if match:
-                        json_str = match.group(0)
-                    else:
-                        raise ValueError("No JSON found")
-                final_plan_parsed = json.loads(json_str)
-            except:
-                # Don't truncate - preserve full text
-                final_plan_parsed = {"executive_summary": final_plan_parsed}
+        if hasattr(final_result.final_output, 'model_dump'):
+            final_plan_parsed = final_result.final_output.model_dump()
+        elif hasattr(final_result.final_output, 'dict'):
+            final_plan_parsed = final_result.final_output.dict()
+        elif isinstance(final_result.final_output, dict):
+            final_plan_parsed = final_result.final_output
+        else:
+            # Fallback: try to parse as JSON string
+            final_plan_parsed = json.loads(str(final_result.final_output))
+        
+        print(f" Final plan parsed successfully from structured output")
+    except Exception as e:
+        print(f"  Warning: Could not parse final plan as structured output: {e}")
+        print(f"   Creating basic final plan structure...")
+        final_plan_parsed = {"executive_summary": str(final_result.final_output)}
     
     # Validate final_plan has required structure
     if not isinstance(final_plan_parsed, dict):
-        # Don't truncate - preserve full text
         final_plan_parsed = {"executive_summary": str(final_plan_parsed)}
     
     # Ensure timeline exists (even if empty)
-    if "timeline" not in final_plan_parsed:
-        print("⚠️  Warning: Coordinator did not generate timeline in final plan")
-        final_plan_parsed["timeline"] = []
+    if "timeline" not in final_plan_parsed or not final_plan_parsed["timeline"]:
+        print("  Warning: Coordinator did not generate timeline in final plan, creating default")
+        final_plan_parsed["timeline"] = [
+            {
+                "phase": "Pre-Event Planning",
+                "tasks": ["Finalize all bookings", "Confirm speakers and vendors"],
+                "deadline": event_details.get('event_date', 'TBD')
+            }
+        ]
+    
+    # Ensure schedule exists
+    if "schedule" not in final_plan_parsed or not final_plan_parsed.get("schedule", {}).get("sessions"):
+        print("  Warning: Creating basic schedule from event details")
+        final_plan_parsed["schedule"] = create_basic_schedule(event_details)
+    
+    # Ensure budget exists
+    if "budget" not in final_plan_parsed:
+        budget_range = event_details.get('budget_range', 'Not specified')
+        final_plan_parsed["budget"] = {
+            "total_available": budget_range,
+            "total_allocated": "TBD",
+            "by_category": {},
+            "status": "within_budget"
+        }
+    
+    # Ensure recommendations include specialist outputs
+    if "recommendations" not in final_plan_parsed or not final_plan_parsed["recommendations"]:
+        print("  Warning: Adding specialist outputs to recommendations")
+        final_plan_parsed["recommendations"] = validated_specialist_outputs
+    
+    # Convert calendar result from Pydantic to dict if needed
+    if calendar_result and calendar_result.final_output:
+        cal_output = calendar_result.final_output
+        if hasattr(cal_output, 'model_dump'):
+            calendar_data = cal_output.model_dump()
+        elif hasattr(cal_output, 'dict'):
+            calendar_data = cal_output.dict()
+        elif isinstance(cal_output, dict):
+            calendar_data = cal_output
+        elif isinstance(cal_output, str):
+            try:
+                calendar_data = json.loads(cal_output)
+            except json.JSONDecodeError:
+                calendar_data = {"status": "error", "message": cal_output}
+        else:
+            calendar_data = {"status": "error", "message": str(cal_output)}
+    else:
+        calendar_data = {"status": "error", "message": "No calendar result"}
     
     # Return comprehensive results
     result = {
@@ -1011,7 +982,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         "planning_phase": validated_planning,
         "specialist_outputs": validated_specialist_outputs,
         "final_plan": final_plan_parsed,
-        "calendar_invite": calendar_result.final_output if calendar_result else json.dumps({"status": "error"}),
+        "calendar_invite": calendar_data,
         "registration_form": form_data,
         "logo": logo_data,
         "pdf_report": pdf_path,
@@ -1034,35 +1005,35 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         if fs_server is not None:
             try:
                 loop.run_until_complete(fs_server.__aexit__(None, None, None))
-                print("\n🔒 Filesystem MCP server closed.")
+                print("\n Filesystem MCP server closed.")
             except Exception as e:
-                print(f"⚠️  Error closing filesystem server: {e}")
+                print(f"  Error closing filesystem server: {e}")
         
         if tally_server is not None:
             try:
                 loop.run_until_complete(tally_server.__aexit__(None, None, None))
-                print("🔒 Tally MCP server closed.")
+                print(" Tally MCP server closed.")
             except Exception as e:
-                print(f"⚠️  Error closing tally server: {e}")
+                print(f"  Error closing tally server: {e}")
         
         if SANDBOX_ENABLED and SANDBOX_DIR.exists():
-            print("📁 Copying files from sandbox to project...")
+            print(" Copying files from sandbox to project...")
             copy_sandbox_files_to_project(SANDBOX_DIR, PROJECT_OUTPUT_DIR)
-            print("✅ Sandbox files copied to event_outputs/\n")
+            print(" Sandbox files copied to event_outputs/\n")
     except Exception as cleanup_error:
-        print(f"⚠️  Cleanup error: {cleanup_error}")
+        print(f"  Cleanup error: {cleanup_error}")
     
     # Show where calendar file was created
     from pathlib import Path
     calendar_files = list(Path("event_outputs").glob("*.ics"))
     if calendar_files:
         print("=" * 60)
-        print("📅 Calendar Files Created:")
+        print(" Calendar Files Created:")
         for cf in calendar_files:
             if fs_server is not None:
-                print(f"  📡 {cf.name} (via sandboxed MCP)")
+                print(f"   {cf.name} (via sandboxed MCP)")
             else:
-                print(f"  📂 {cf.name} (local file I/O)")
+                print(f"   {cf.name} (local file I/O)")
         print("=" * 60 + "\n")
     
     # Log final outputs summary

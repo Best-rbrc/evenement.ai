@@ -219,16 +219,16 @@ async def voice_to_form(payload: VoiceInput) -> dict:
     # Basic request diagnostics
     transcript_len = len(payload.transcript or "")
     server_logger.info("=" * 80)
-    server_logger.info("🎤 /api/voice-to-form called")
+    server_logger.info(" /api/voice-to-form called")
     server_logger.info(f"Transcript length: {transcript_len}")
     server_logger.info(f"Full transcript: {payload.transcript}")
-    print(f"\n🎤 /api/voice-to-form endpoint called")
+    print(f"\n /api/voice-to-form endpoint called")
     print(f"   Transcript length: {transcript_len}")
     print(f"   Transcript: {payload.transcript}")
     
     if not payload.transcript or not payload.transcript.strip():
-        server_logger.warning("⚠️ Empty transcript received")
-        print("⚠️ Empty transcript received")
+        server_logger.warning(" Empty transcript received")
+        print(" Empty transcript received")
         raise HTTPException(status_code=400, detail="Transcript cannot be empty")
     
     try:
@@ -269,7 +269,7 @@ IMPORTANT RULES:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Extract event details from: {payload.transcript}"}
             ],
-            response_format={"type": "json_object"},
+             output_type={"type": "json_object"},
             temperature=0.1
         )
         
@@ -280,7 +280,7 @@ IMPORTANT RULES:
 
         result = json.loads(response.choices[0].message.content)
         server_logger.info("Parsed fields from transcript:")
-        print("\n✅ Successfully parsed voice transcript:")
+        print("\n Successfully parsed voice transcript:")
         for key, value in result.items():
             server_logger.info(f"  - {key}: {value}")
             print(f"   {key}: {value}")

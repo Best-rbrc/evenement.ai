@@ -50,7 +50,7 @@ async def setup_sandboxed_mcp():
         # Get API key from environment
         tally_api_key = os.getenv('TALLY_API_KEY', '')
         if not tally_api_key:
-            print("⚠️  Warning: TALLY_API_KEY environment variable not set")
+            print("  Warning: TALLY_API_KEY environment variable not set")
         
         # Create sandboxed Tally server with network egress and API key via static env vars
         tally_server = SandboxedMCPStdio(
@@ -66,10 +66,10 @@ async def setup_sandboxed_mcp():
         
         # Initialize the server
         await tally_server.__aenter__()
-        print("✅ Sandboxed custom Tally MCP server initialized with network egress")
+        print(" Sandboxed custom Tally MCP server initialized with network egress")
         return tally_server
     except Exception as e:
-        print(f"⚠️  MCP setup failed: {e}")
+        print(f"  MCP setup failed: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -78,20 +78,20 @@ async def setup_sandboxed_mcp():
 def test_form_without_mcp():
     """Test form agent WITHOUT MCP (baseline test)."""
     print("=" * 60)
-    print("🧪 Testing Form Agent WITHOUT MCP (Baseline)")
+    print(" Testing Form Agent WITHOUT MCP (Baseline)")
     print("=" * 60)
     
     # Create form agent WITHOUT MCP
-    print("\n1️⃣  Creating form agent (no MCP)...")
+    print("\n1  Creating form agent (no MCP)...")
     try:
         form_agent = create_form_agent(mcp_servers=None)
-        print("✅ Form agent created")
+        print(" Form agent created")
     except Exception as e:
-        print(f"❌ Failed to create form agent: {e}")
+        print(f" Failed to create form agent: {e}")
         return False
     
     # Test form prompt
-    print("\n2️⃣  Running form agent to create registration form...")
+    print("\n2  Running form agent to create registration form...")
     prompt = """You are creating a registration form for a tech conference.
 
 Event Details:
@@ -106,11 +106,11 @@ Return ONLY valid JSON with: {"form_url": "https://tally.so/r/xxxxx", "status": 
     
     try:
         result = Runner.run_sync(form_agent, prompt, max_turns=15)
-        print(f"✅ Agent completed")
+        print(f" Agent completed")
         print(f"\nAgent Output:\n{result.final_output}")
         return True
     except Exception as e:
-        print(f"❌ Agent failed: {e}")
+        print(f" Agent failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -119,19 +119,19 @@ Return ONLY valid JSON with: {"form_url": "https://tally.so/r/xxxxx", "status": 
 def test_form_with_mcp_disabled():
     """Test with MCP disabled to verify it still works."""
     print("\n\n" + "=" * 60)
-    print("🧪 Testing Form Agent with MCP Disabled")
+    print(" Testing Form Agent with MCP Disabled")
     print("=" * 60)
     
     # Create form agent WITHOUT MCP
-    print("\n1️⃣  Creating form agent (MCP disabled)...")
+    print("\n1  Creating form agent (MCP disabled)...")
     try:
         form_agent = create_form_agent(mcp_servers=None)
-        print("✅ Form agent created")
+        print(" Form agent created")
     except Exception as e:
-        print(f"❌ Failed to create form agent: {e}")
+        print(f" Failed to create form agent: {e}")
         return False
     
-    print("\n2️⃣  Running form agent...")
+    print("\n2  Running form agent...")
     prompt = """You are creating a registration form for a corporate event.
 
 Event Details:
@@ -145,21 +145,21 @@ Return ONLY valid JSON with: {"form_url": "https://tally.so/r/xxxxx", "status": 
     
     try:
         result = Runner.run_sync(form_agent, prompt, max_turns=15)
-        print(f"✅ Agent completed")
+        print(f" Agent completed")
         print(f"\nAgent Output:\n{result.final_output}")
         return True
     except Exception as e:
-        print(f"❌ Agent failed: {e}")
+        print(f" Agent failed: {e}")
         return False
 
 
 def main():
     """Run the tests."""
-    print("\n🚀 Testing Form Agent WITH MCP ONLY\n")
+    print("\n Testing Form Agent WITH MCP ONLY\n")
     
     # Only test MCP version
     print("=" * 60)
-    print("🧪 Testing Form Agent WITH Sandboxed MCP")
+    print(" Testing Form Agent WITH Sandboxed MCP")
     print("=" * 60)
     
     test2_result = None
@@ -170,26 +170,26 @@ def main():
         
         try:
             # Setup MCP server in this event loop
-            print("\n1️⃣  Setting up sandboxed MCP server...")
+            print("\n1  Setting up sandboxed MCP server...")
             mcp_server = loop.run_until_complete(setup_sandboxed_mcp())
             
             if mcp_server is None:
-                print("⚠️  MCP setup failed, skipping MCP test")
+                print("  MCP setup failed, skipping MCP test")
                 test2_result = None
             else:
                 # Now that MCP server is set up, we can use Runner.run_sync
-                print("\n2️⃣  Creating form agent with MCP...")
+                print("\n2  Creating form agent with MCP...")
                 try:
                     form_agent = create_form_agent(mcp_servers=mcp_server)
-                    print("✅ Form agent created with MCP")
+                    print(" Form agent created with MCP")
                 except Exception as e:
-                    print(f"❌ Failed to create form agent: {e}")
+                    print(f" Failed to create form agent: {e}")
                     import traceback
                     traceback.print_exc()
                     test2_result = False
                 
                 if test2_result is not False:  # Only run agent if agent was created successfully
-                    print("\n3️⃣  Running form agent with MCP (30 sec timeout)...")
+                    print("\n3  Running form agent with MCP (30 sec timeout)...")
                     prompt = """You are creating a registration form for a startup pitch event.
 
 Event Details:
@@ -204,14 +204,14 @@ Return ONLY valid JSON with: {"form_url": "https://tally.so/r/xxxxx", "status": 
                     
                     try:
                         result = Runner.run_sync(form_agent, prompt, max_turns=15)
-                        print(f"✅ Agent completed")
+                        print(f" Agent completed")
                         print(f"\nAgent Output:\n{result.final_output}")
                         test2_result = True
                     except TimeoutError as e:
-                        print(f"❌ Agent TIMEOUT (MCP server not responding): {e}")
+                        print(f" Agent TIMEOUT (MCP server not responding): {e}")
                         test2_result = False
                     except Exception as e:
-                        print(f"❌ Agent failed: {e}")
+                        print(f" Agent failed: {e}")
                         import traceback
                         traceback.print_exc()
                         test2_result = False
@@ -219,25 +219,25 @@ Return ONLY valid JSON with: {"form_url": "https://tally.so/r/xxxxx", "status": 
             loop.close()
             
     except Exception as e:
-        print(f"❌ MCP test setup failed: {e}")
+        print(f" MCP test setup failed: {e}")
         import traceback
         traceback.print_exc()
         test2_result = False
     
     print("\n" + "=" * 60)
-    print("📊 Test Result:")
-    print(f"  MCP Enabled:           {'✅ PASS' if test2_result is True else ('⏭️  SKIP' if test2_result is None else '❌ FAIL')}")
+    print(" Test Result:")
+    print(f"  MCP Enabled:           {' PASS' if test2_result is True else ('⏭  SKIP' if test2_result is None else ' FAIL')}")
     print("=" * 60)
     
     # Overall result
     if test2_result is True:
-        print("\n✅ MCP test PASSED!")
+        print("\n MCP test PASSED!")
         return 0
     elif test2_result is None:
-        print("\n⏭️  MCP test skipped")
+        print("\n⏭  MCP test skipped")
         return 0
     else:
-        print("\n❌ MCP test FAILED")
+        print("\n MCP test FAILED")
         return 1
 
 

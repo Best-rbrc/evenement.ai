@@ -123,22 +123,22 @@ export function EventForm({ onSubmit }: EventFormProps) {
   };
 
   const startVoiceInput = async () => {
-    console.log('🎤 Voice input button clicked');
+    console.log(' Voice input button clicked');
     
     // Check browser support
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('Speech recognition is not supported in your browser. Please use Chrome or Edge.');
-      console.error('❌ Speech recognition not supported');
+      console.error(' Speech recognition not supported');
       return;
     }
     
     // Check microphone permission
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('✅ Microphone access granted');
+      console.log(' Microphone access granted');
       stream.getTracks().forEach(track => track.stop()); // Stop the test stream
     } catch (error) {
-      console.error('❌ Microphone permission denied or error:', error);
+      console.error(' Microphone permission denied or error:', error);
       alert('Microphone access is required for voice input. Please grant microphone permission and try again.');
       return;
     }
@@ -152,7 +152,7 @@ export function EventForm({ onSubmit }: EventFormProps) {
       recognition.lang = 'en-US';
 
       recognition.onstart = () => {
-        console.log('✅ Speech recognition started');
+        console.log(' Speech recognition started');
         setIsListening(true);
         transcriptRef.current = '';
       };
@@ -166,7 +166,7 @@ export function EventForm({ onSubmit }: EventFormProps) {
           const transcriptText = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcriptText + ' ';
-            console.log('✅ Final segment:', transcriptText);
+            console.log(' Final segment:', transcriptText);
           } else {
             interimTranscript += transcriptText + ' ';
             console.log('⏳ Interim segment:', transcriptText);
@@ -176,7 +176,7 @@ export function EventForm({ onSubmit }: EventFormProps) {
         // Always update with final results (these are confirmed)
         if (finalTranscript) {
           transcriptRef.current += finalTranscript;
-          console.log('📝 Updated transcript (added final):', transcriptRef.current);
+          console.log(' Updated transcript (added final):', transcriptRef.current);
         }
         
         // For interim results, we'll capture them when stopping
@@ -185,12 +185,12 @@ export function EventForm({ onSubmit }: EventFormProps) {
           // If we only have interim, store it (will be used if user stops before final)
           const currentFinal = transcriptRef.current;
           transcriptRef.current = currentFinal + interimTranscript;
-          console.log('📝 Updated transcript (interim only):', transcriptRef.current);
+          console.log(' Updated transcript (interim only):', transcriptRef.current);
         }
       };
 
       recognition.onerror = (event: any) => {
-        console.error('❌ Speech recognition error:', event.error);
+        console.error(' Speech recognition error:', event.error);
         setIsListening(false);
         
         // Show user-friendly error messages
@@ -218,30 +218,30 @@ export function EventForm({ onSubmit }: EventFormProps) {
       };
 
       recognition.onend = () => {
-        console.log('🛑 Speech recognition ended');
-        console.log('📝 Final transcript at end:', transcriptRef.current);
+        console.log(' Speech recognition ended');
+        console.log(' Final transcript at end:', transcriptRef.current);
         setIsListening(false);
       };
 
       recognitionRef.current = recognition;
-      console.log('🚀 Starting speech recognition...');
+      console.log(' Starting speech recognition...');
       recognition.start();
     } catch (error) {
-      console.error('❌ Failed to start speech recognition:', error);
+      console.error(' Failed to start speech recognition:', error);
       alert(`Failed to start voice input: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or use Chrome/Edge browser.`);
       setIsListening(false);
     }
   };
 
   const stopVoiceInput = async () => {
-    console.log('🛑 stopVoiceInput called');
-    console.log('🔍 recognitionRef.current exists:', !!recognitionRef.current);
+    console.log(' stopVoiceInput called');
+    console.log(' recognitionRef.current exists:', !!recognitionRef.current);
     
     if (recognitionRef.current) {
       const recognition = recognitionRef.current;
       
       // Log current transcript before stopping
-      console.log('📝 Transcript before stop:', transcriptRef.current);
+      console.log(' Transcript before stop:', transcriptRef.current);
       
       // Stop the recognition - this will trigger onend
       recognition.stop();
@@ -254,13 +254,13 @@ export function EventForm({ onSubmit }: EventFormProps) {
       // Get the final transcript
       let transcript = transcriptRef.current.trim();
       
-      console.log('🎤 Voice input stopped.');
-      console.log('📝 Final transcript:', transcript);
-      console.log('📏 Transcript length:', transcript.length);
-      console.log('📏 Transcript characters:', transcript.split('').map(c => `'${c}'`).join(''));
+      console.log(' Voice input stopped.');
+      console.log(' Final transcript:', transcript);
+      console.log(' Transcript length:', transcript.length);
+      console.log(' Transcript characters:', transcript.split('').map(c => `'${c}'`).join(''));
       
       if (!transcript) {
-        console.error('❌ No transcript available!');
+        console.error(' No transcript available!');
         console.error('   Possible causes:');
         console.error('   1. User did not speak (check microphone)');
         console.error('   2. Microphone permission denied (check browser permissions)');
@@ -277,8 +277,8 @@ export function EventForm({ onSubmit }: EventFormProps) {
         const url = `${API_BASE_URL}/api/voice-to-form`;
         const payload = { transcript };
         
-        console.log('📤 Sending voice transcript to server:', url);
-        console.log('📝 Payload:', payload);
+        console.log(' Sending voice transcript to server:', url);
+        console.log(' Payload:', payload);
         
         const response = await fetch(url, {
           method: 'POST',
@@ -286,7 +286,7 @@ export function EventForm({ onSubmit }: EventFormProps) {
           body: JSON.stringify(payload)
         });
 
-        console.log('📥 Response received:', {
+        console.log(' Response received:', {
           status: response.status,
           statusText: response.statusText,
           ok: response.ok,
@@ -295,12 +295,12 @@ export function EventForm({ onSubmit }: EventFormProps) {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('❌ Server error response:', errorText);
+          console.error(' Server error response:', errorText);
           throw new Error(`Server error: ${response.status} ${response.statusText}. ${errorText}`);
         }
 
         const data = await response.json();
-        console.log('✅ Received data from server:', data);
+        console.log(' Received data from server:', data);
         
         // Auto-fill form with extracted data (only non-null values)
         if (data.eventType) setValue('eventType', data.eventType, { shouldValidate: true });
@@ -318,20 +318,20 @@ export function EventForm({ onSubmit }: EventFormProps) {
         if (data.guestCountMax !== null && data.guestCountMax !== undefined) setValue('guestCountMax', data.guestCountMax, { shouldValidate: true });
         if (data.specialRequirements) setValue('specialRequirements', data.specialRequirements, { shouldValidate: true });
 
-        console.log('✅ Form auto-filled successfully');
+        console.log(' Form auto-filled successfully');
         transcriptRef.current = '';
       } catch (error) {
-        console.error('❌ Error processing voice input:', error);
+        console.error(' Error processing voice input:', error);
         if (error instanceof Error) {
-          console.error('❌ Error message:', error.message);
-          console.error('❌ Error stack:', error.stack);
+          console.error(' Error message:', error.message);
+          console.error(' Error stack:', error.stack);
         }
         alert(`Failed to process voice input: ${error instanceof Error ? error.message : 'Unknown error'}. Please check the browser console for details.`);
       } finally {
         setIsProcessing(false);
       }
     } else {
-      console.warn('⚠️ No recognition instance available');
+      console.warn(' No recognition instance available');
     }
   };
 

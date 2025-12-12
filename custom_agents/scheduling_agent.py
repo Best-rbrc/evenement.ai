@@ -1,9 +1,9 @@
 """Advanced scheduling agent with constraint optimization using Google OR-Tools."""
-from agents import Agent, function_tool
+from agents import Agent, function_tool, AgentOutputSchema
 from ortools.sat.python import cp_model
 from typing import List, Dict, Any, Tuple
 import json
-from workflows.schemas import schema_to_json_example
+from workflows.pydantic_schemas import SchedulingOutput
 from datetime import datetime, timedelta
 
 
@@ -380,9 +380,13 @@ def analyze_schedule_conflicts(
 
 
 def create_scheduling_agent() -> Agent:
-    """Create advanced scheduling agent with constraint optimization capabilities."""
+    """Create advanced scheduling agent with constraint optimization capabilities.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Advanced Scheduling Specialist",
+         output_type=AgentOutputSchema(SchedulingOutput, strict_json_schema=False),
         handoff_description="Optimizes complex event schedules using constraint programming to resolve conflicts and maximize efficiency.",
         instructions="""
         You are an expert in event scheduling using advanced constraint optimization with Google OR-Tools.
@@ -443,9 +447,6 @@ def create_scheduling_agent() -> Agent:
         - Flag when constraints make scheduling impossible
         
         Be proactive: If you detect potential issues, suggest alternatives before they become problems.
-        
-        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-""" + schema_to_json_example("scheduling") + """
         """,
         tools=[optimize_schedule, analyze_schedule_conflicts]
     )

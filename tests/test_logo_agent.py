@@ -48,12 +48,12 @@ def test_logo_generation():
     # Check for API key
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        print("❌ ERROR: OPENAI_API_KEY not found in environment variables")
+        print(" ERROR: OPENAI_API_KEY not found in environment variables")
         print("Please create a .env file with your OpenAI API key:")
         print("  OPENAI_API_KEY=sk-...your-key-here...")
         return False
     
-    print("✅ OpenAI API key found")
+    print(" OpenAI API key found")
     print(f"   Key starts with: {api_key[:10]}...")
     print()
     
@@ -63,7 +63,7 @@ def test_logo_generation():
     event_description = "A premier conference bringing together AI researchers, practitioners, and innovators"
     style_preferences = "modern, tech-forward, professional"
     
-    print("📝 Test Parameters:")
+    print(" Test Parameters:")
     print(f"   Event Name: {event_name}")
     print(f"   Event Type: {event_type}")
     print(f"   Description: {event_description}")
@@ -71,7 +71,7 @@ def test_logo_generation():
     print()
     
     # Test the function directly
-    print("🎨 Generating logo...")
+    print(" Generating logo...")
     try:
         result_json = generate_logo_image(
             event_name=event_name,
@@ -83,12 +83,12 @@ def test_logo_generation():
         result = json.loads(result_json)
         
         if result.get("status") == "error":
-            print(f"❌ Error: {result.get('message')}")
+            print(f" Error: {result.get('message')}")
             return False
         
-        print("✅ Logo generated successfully!")
+        print(" Logo generated successfully!")
         print()
-        print("📄 Results:")
+        print(" Results:")
         print(f"   Status: {result.get('status')}")
         print(f"   Logo File Path: {result.get('logo_file_path')}")
         print(f"   Logo URL: {result.get('logo_url')}")
@@ -99,13 +99,13 @@ def test_logo_generation():
         logo_path = result.get('logo_file_path')
         if logo_path and Path(logo_path).exists():
             file_size = Path(logo_path).stat().st_size
-            print(f"✅ Logo file saved: {logo_path}")
+            print(f" Logo file saved: {logo_path}")
             print(f"   File size: {file_size:,} bytes ({file_size / 1024:.2f} KB)")
         else:
-            print(f"⚠️  Warning: Logo file not found at {logo_path}")
+            print(f"  Warning: Logo file not found at {logo_path}")
         
         print()
-        print("📋 Additional Information:")
+        print(" Additional Information:")
         print(f"   Color Palette: {result.get('color_palette')}")
         print(f"   Typography: {result.get('typography_suggestions', '')[:80]}...")
         print(f"   Usage Guidelines: {len(result.get('usage_guidelines', []))} items")
@@ -114,11 +114,11 @@ def test_logo_generation():
         return True
         
     except json.JSONDecodeError as e:
-        print(f"❌ Error parsing JSON response: {e}")
+        print(f" Error parsing JSON response: {e}")
         print(f"   Raw response: {result_json[:200]}...")
         return False
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f" Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -126,33 +126,33 @@ def test_logo_generation():
 
 def test_logo_agent_creation():
     """Test that the logo agent can be created."""
-    print("🧪 Testing logo agent creation...")
+    print(" Testing logo agent creation...")
     if create_logo_agent is None:
-        print("⚠️  Skipping agent creation test (agents package not available)")
+        print("  Skipping agent creation test (agents package not available)")
         print("   This is expected if TensorFlow dependencies have issues.")
         print("   The generate_logo_image() function can still be tested directly.")
         return True
     
     try:
         agent = create_logo_agent()
-        print(f"✅ Agent created: {agent.name}")
+        print(f" Agent created: {agent.name}")
         print(f"   Description: {agent.handoff_description}")
         print(f"   Tools: {[tool.name for tool in agent.tools]}")
         return True
     except ImportError as e:
-        print(f"⚠️  Agent creation skipped: {e}")
+        print(f"  Agent creation skipped: {e}")
         print("   This is expected if agents package has dependency issues.")
         print("   The generate_logo_image() function can still be tested directly.")
         return True
     except Exception as e:
-        print(f"❌ Error creating agent: {e}")
+        print(f" Error creating agent: {e}")
         return False
 
 
 def main():
     """Run all tests."""
     print("=" * 60)
-    print("🧪 Logo Agent Test Suite")
+    print(" Logo Agent Test Suite")
     print("=" * 60)
     print()
     
@@ -163,7 +163,7 @@ def main():
     print()
     
     if not agent_ok:
-        print("❌ Agent creation failed. Skipping logo generation test.")
+        print(" Agent creation failed. Skipping logo generation test.")
         return
     
     # Test 2: Logo generation
@@ -174,16 +174,16 @@ def main():
     
     # Summary
     print("=" * 60)
-    print("📊 Test Summary")
+    print(" Test Summary")
     print("=" * 60)
-    print(f"   Agent Creation: {'✅ PASS' if agent_ok else '❌ FAIL'}")
-    print(f"   Logo Generation: {'✅ PASS' if logo_ok else '❌ FAIL'}")
+    print(f"   Agent Creation: {' PASS' if agent_ok else ' FAIL'}")
+    print(f"   Logo Generation: {' PASS' if logo_ok else ' FAIL'}")
     print()
     
     if agent_ok and logo_ok:
-        print("🎉 All tests passed!")
+        print(" All tests passed!")
     else:
-        print("⚠️  Some tests failed. Please check the output above.")
+        print("  Some tests failed. Please check the output above.")
 
 
 if __name__ == "__main__":

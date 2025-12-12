@@ -28,7 +28,7 @@ def check_api_key():
 
 def collect_event_details():
     """Collect basic event information from the user."""
-    print("🎉 Welcome to the AI Event Planner!")
+    print(" Welcome to the AI Event Planner!")
     print("I'll help you plan your event by asking a few key questions.\n")
 
     event_type = input("What type of event are you planning? (e.g., wedding, corporate conference, tech conference, birthday party, gala dinner, workshop, networking event, product launch, charity fundraiser, retreat): ").strip().lower()

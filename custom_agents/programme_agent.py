@@ -1,5 +1,5 @@
-from agents import Agent, function_tool, WebSearchTool
-from workflows.schemas import schema_to_json_example
+from agents import Agent, function_tool, WebSearchTool, AgentOutputSchema
+from workflows.pydantic_schemas import ProgrammeOutput
 
 @function_tool
 def create_event_schedule(event_name: str, event_duration: str, session_count: int) -> str:
@@ -17,9 +17,13 @@ def create_break_schedule(break_duration: str, break_count: int) -> str:
     return f"Created {break_count} breaks of {break_duration} each"
 
 def create_programme_agent() -> Agent:
-    """Create a programme specialist agent."""
+    """Create a programme specialist agent.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Programme Specialist",
+         output_type=AgentOutputSchema(ProgrammeOutput, strict_json_schema=False),
         instructions="""
         You are a professional programme coordinator with expertise in:
         - Event scheduling and timeline creation
@@ -49,8 +53,6 @@ def create_programme_agent() -> Agent:
         5. Validate complete JSON before returning
         6. NO extra text before or after JSON
         
-        REQUIRED STRUCTURE:
-""" + schema_to_json_example("programme") + """
         """,
         tools=[create_event_schedule, plan_session_flow, create_break_schedule]
     )

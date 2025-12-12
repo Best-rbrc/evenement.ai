@@ -129,14 +129,14 @@ Use the optimize_schedule tool and explain why it fails if it does."""
 
 
 if __name__ == "__main__":
-    print("🧪 Scheduling Agent Test Suite\n")
+    print(" Scheduling Agent Test Suite\n")
     
     try:
         test_basic_scheduling()
         test_infeasible_scheduling()
         
-        print("\n\n✅ All tests completed!")
+        print("\n\n All tests completed!")
     except Exception as e:
-        print(f"\n\n❌ Test failed: {e}")
+        print(f"\n\n Test failed: {e}")
         import traceback
         traceback.print_exc()

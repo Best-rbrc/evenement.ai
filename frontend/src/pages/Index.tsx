@@ -49,10 +49,10 @@ const safeParse = <T,>(value: unknown): T | null => {
 
   try {
     const parsed = JSON.parse(cleaned) as T;
-    console.log('✅ safeParse success:', cleaned.substring(0, 100));
+    console.log(' safeParse success:', cleaned.substring(0, 100));
     return parsed;
   } catch (error) {
-    console.warn('❌ safeParse failed for:', cleaned.substring(0, 120), error);
+    console.warn(' safeParse failed for:', cleaned.substring(0, 120), error);
     return null;
   }
 };
@@ -330,7 +330,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
       budgetBreakdownsKeys: Object.keys(budgetBreakdowns),
     });
   } else {
-    console.log(`✅ Found ${breakdown.length} budget categories:`, breakdown.map(b => b.category).join(', '));
+    console.log(` Found ${breakdown.length} budget categories:`, breakdown.map(b => b.category).join(', '));
   }
 
   const budgetTotal = Number(finalPlan?.budget?.total_allocated) || breakdown.reduce((sum, entry) => sum + entry.amount, 0);
@@ -471,7 +471,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
       finalPlanKeys: finalPlan ? Object.keys(finalPlan) : [],
     });
   } else {
-    console.log(`✅ Found ${schedule.length} schedule items`);
+    console.log(` Found ${schedule.length} schedule items`);
   }
 
   // Use only final_plan.recommendations.speakers
@@ -560,7 +560,7 @@ const mapWorkflowToEventResult = (response: PlanApiResponse, formData?: EventFor
       finalPlanPreview: finalPlan ? JSON.stringify(finalPlan).substring(0, 500) : 'No finalPlan',
     });
   } else {
-    console.log(`✅ Found ${timelineItems.length} timeline items:`, timelineItems);
+    console.log(` Found ${timelineItems.length} timeline items:`, timelineItems);
   }
 
   // Use only final_plan.risks

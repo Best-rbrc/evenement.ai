@@ -1,5 +1,5 @@
-from agents import Agent, function_tool, WebSearchTool
-from workflows.schemas import schema_to_json_example
+from agents import Agent, function_tool, WebSearchTool, AgentOutputSchema
+from workflows.pydantic_schemas import SpeakersOutput
 
 @function_tool
 def search_speakers(topic: str, event_type: str, budget_range: str) -> str:
@@ -17,9 +17,13 @@ def coordinate_speaker_logistics(speaker_name: str, event_date: str, location: s
     return f"Coordinated logistics for {speaker_name} for {event_date} in {location}"
 
 def create_speakers_agent() -> Agent:
-    """Create a speakers specialist agent."""
+    """Create a speakers specialist agent.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Speakers Specialist",
+         output_type=AgentOutputSchema(SpeakersOutput, strict_json_schema=False),
         instructions="""
         You are a professional speakers coordinator with expertise in:
         - Speaker recruitment and selection
@@ -49,8 +53,6 @@ def create_speakers_agent() -> Agent:
         5. NO extra data or trailing content after JSON
         6. Keep response concise to avoid parsing issues
         
-        REQUIRED STRUCTURE:
-""" + schema_to_json_example("speakers") + """
         """,
         tools=[search_speakers, get_speaker_details, coordinate_speaker_logistics]
     )

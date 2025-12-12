@@ -42,22 +42,22 @@ def test_conference_with_scheduling():
         # Check 1: Was scheduling agent used?
         agents_used = result.get('agents_used', [])
         scheduling_used = 'scheduling' in agents_used
-        print(f"\n✓ Scheduling agent used: {scheduling_used}")
+        print(f"\n Scheduling agent used: {scheduling_used}")
         
         # Check 2: Does final plan have schedule section?
         has_schedule_section = 'schedule' in final_plan
-        print(f"✓ Final plan has 'schedule' section: {has_schedule_section}")
+        print(f" Final plan has 'schedule' section: {has_schedule_section}")
         
         if has_schedule_section:
             schedule = final_plan['schedule']
             
             # Check 3: Are metrics present?
             has_metrics = 'metrics' in schedule
-            print(f"✓ Schedule has metrics: {has_metrics}")
+            print(f" Schedule has metrics: {has_metrics}")
             
             if has_metrics:
                 metrics = schedule['metrics']
-                print(f"\n📊 SCHEDULING METRICS:")
+                print(f"\n SCHEDULING METRICS:")
                 print(f"   - Total duration: {metrics.get('total_duration', 'N/A')}")
                 print(f"   - Event ends at: {metrics.get('event_ends_at', 'N/A')}")
                 print(f"   - Conflicts resolved: {metrics.get('conflicts_resolved', 'N/A')}")
@@ -69,18 +69,18 @@ def test_conference_with_scheduling():
             
             # Check 4: Are sessions included?
             has_sessions = 'sessions' in schedule and len(schedule.get('sessions', [])) > 0
-            print(f"\n✓ Optimized sessions included: {has_sessions}")
+            print(f"\n Optimized sessions included: {has_sessions}")
             if has_sessions:
                 print(f"   - Number of sessions: {len(schedule['sessions'])}")
                 print(f"   - Sample session: {schedule['sessions'][0].get('session_name', 'N/A')}")
             
             # Check 5: Status
             status = schedule.get('status', 'unknown')
-            print(f"\n✓ Schedule status: {status}")
+            print(f"\n Schedule status: {status}")
         
         # Check 6: Budget section present?
         has_budget = 'budget' in final_plan
-        print(f"\n✓ Final plan has budget section: {has_budget}")
+        print(f"\n Final plan has budget section: {has_budget}")
         
         if has_budget:
             budget = final_plan['budget']
@@ -88,7 +88,7 @@ def test_conference_with_scheduling():
             print(f"   - Total allocated: {budget.get('total_allocated', 'N/A')}")
         
         print("\n" + "="*60)
-        print("✅ E2E TEST COMPLETE")
+        print(" E2E TEST COMPLETE")
         print("="*60)
         
         # Save full result to file for inspection
@@ -100,29 +100,29 @@ def test_conference_with_scheduling():
                 'final_plan': final_plan
             }, f, indent=2)
         
-        print(f"\n💾 Full result saved to: {output_file}")
+        print(f"\n Full result saved to: {output_file}")
         
         return True
         
     except json.JSONDecodeError as e:
-        print(f"\n❌ Failed to parse final plan as JSON: {e}")
+        print(f"\n Failed to parse final plan as JSON: {e}")
         print("\nRaw final_plan output:")
         print(result.get('final_plan', 'N/A')[:500] + "...")
         return False
 
 
 if __name__ == "__main__":
-    print("🧪 End-to-End Scheduling Integration Test\n")
+    print(" End-to-End Scheduling Integration Test\n")
     
     try:
         success = test_conference_with_scheduling()
         
         if success:
-            print("\n\n✅ All integration checks passed!")
+            print("\n\n All integration checks passed!")
         else:
-            print("\n\n⚠️  Some checks failed - see output above")
+            print("\n\n  Some checks failed - see output above")
             
     except Exception as e:
-        print(f"\n\n❌ Test failed with exception: {e}")
+        print(f"\n\n Test failed with exception: {e}")
         import traceback
         traceback.print_exc()

@@ -1,9 +1,9 @@
-from agents import Agent, function_tool
+from agents import Agent, function_tool, AgentOutputSchema
 import datetime
 import os
 from typing import Dict, Any
 import uuid
-from workflows.schemas import schema_to_json_example
+from workflows.pydantic_schemas import CalendarOutput
 
 
 @function_tool
@@ -213,6 +213,8 @@ def format_calendar_description(event_details: str, specialist_outputs: str) -> 
 def create_calendar_agent(mcp_servers=None) -> Agent:
     """Create a calendar specialist agent that generates calendar invites.
     
+    Uses structured outputs to ensure valid JSON responses.
+    
     Args:
         mcp_servers: Optional MCPServers instance for sandboxed file operations
     """
@@ -221,7 +223,8 @@ def create_calendar_agent(mcp_servers=None) -> Agent:
     
     # Build agent with optional MCP servers
     agent_kwargs = {
-        "name": "Calendar Specialist", 
+        "name": "Calendar Specialist",
+        "output_type": AgentOutputSchema(CalendarOutput, strict_json_schema=False),
         "handoff_description": "Creates calendar invites and ICS files for the planned event.",
         "instructions": """
         You are a professional calendar and scheduling specialist. Your role is to create calendar invites 
@@ -274,9 +277,6 @@ def create_calendar_agent(mcp_servers=None) -> Agent:
 
         Always provide clear feedback on file creation success and location.
         Handle errors gracefully and suggest alternatives when issues occur.
-
-        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-""" + schema_to_json_example("calendar") + """
         """,
         "tools": tools,
     }

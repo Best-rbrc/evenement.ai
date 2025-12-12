@@ -5,11 +5,11 @@ import re
 import time
 import random
 import contextlib
-from agents import Agent
+from agents import Agent, AgentOutputSchema
 from agents.mcp import MCPServerStdio
 from agents.model_settings import ModelSettings
 from agents import Runner
-from workflows.schemas import schema_to_json_example
+from workflows.pydantic_schemas import FormOutput
 
 TALLY_MCP_URL = "https://api.tally.so/mcp"
 
@@ -68,6 +68,7 @@ def create_form_agent(mcp_servers=None) -> Agent:
 
     agent_kwargs = {
         "name": "Form Creation Specialist",
+        "output_type": AgentOutputSchema(FormOutput, strict_json_schema=False),
         "instructions": """
         You are a specialist in designing and managing online forms.
 
@@ -85,8 +86,7 @@ def create_form_agent(mcp_servers=None) -> Agent:
         - Valid format: "https://tally.so/r/xxxxx" (where xxxxx is the actual form ID)
         - If form creation fails, use empty string "" for form_url
         
-        CRITICAL: After successful form creation, return ONLY valid JSON in this exact format:
-""" + schema_to_json_example("form") + """
+        CRITICAL: After successful form creation, return ONLY valid JSON.
         
         Do not include any other text, explanations, or markdown formatting in your response.
 

@@ -7,8 +7,8 @@ from typing import Dict, Any, List
 import json
 import logging
 
+from pydantic import BaseModel
 from workflows.prompts import build_refinement_prompt, build_specialist_prompt, build_finalization_prompt
-from workflows.schemas import validate_agent_output
 from workflows.workflow_utils import run_sync_with_backoff
 from custom_agents.base import create_specialized_agents
 from custom_agents.coordinator_agent import create_coordinator_agent
@@ -17,6 +17,17 @@ from custom_agents.coordinator_agent import create_coordinator_agent
 AGENT_MAX_TURNS = 20
 
 logger = logging.getLogger(__name__)
+
+
+def to_dict(obj: Any) -> Any:
+    """Convert Pydantic models to dicts, recursively."""
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
+    elif isinstance(obj, dict):
+        return {k: to_dict(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [to_dict(item) for item in obj]
+    return obj
 
 
 def refine_event_plan(
@@ -131,9 +142,8 @@ def refine_event_plan(
         try:
             result = run_sync_with_backoff(agent, specialist_prompt, max_turns=10)  # Reduced from 20
             
-            # Validate and parse output
-            validated_output = validate_agent_output(agent_name, result.final_output)
-            updated_outputs[agent_name] = validated_output
+            # Convert Pydantic model to dict for JSON serialization
+            updated_outputs[agent_name] = to_dict(result.final_output)
             changed_sections.append(agent_name)
             logger.info(f" {agent_name} agent updated successfully")
             print(f"    {agent_name} updated")
@@ -157,13 +167,10 @@ def refine_event_plan(
             )
             budgeting_agent = all_specialists["budgeting"]
             budgeting_result = run_sync_with_backoff(budgeting_agent, budgeting_prompt, max_turns=AGENT_MAX_TURNS)
-            try:
-                validated_budget = validate_agent_output("budgeting", budgeting_result.final_output)
-                updated_outputs["budgeting"] = validated_budget
-                if "budgeting" not in changed_sections:
-                    changed_sections.append("budgeting")
-            except Exception as e:
-                logger.error(f"Error validating budgeting output: {e}")
+            # Convert Pydantic model to dict for JSON serialization
+            updated_outputs["budgeting"] = to_dict(budgeting_result.final_output)
+            if "budgeting" not in changed_sections:
+                changed_sections.append("budgeting")
     
     # Regenerate final plan with updated outputs
     logger.info("Regenerating final plan with updated outputs...")
@@ -181,26 +188,10 @@ def refine_event_plan(
     try:
         final_result = run_sync_with_backoff(coordinator, finalization_prompt, max_turns=15)  # Reduced from 20
         
-        # Validate final plan
-        try:
-            updated_plan = validate_agent_output("final_plan", final_result.final_output, required_agents=updated_required_agents)
-            logger.info(" Final plan regenerated successfully")
-            print(" Final plan regenerated")
-        except Exception as e:
-            logger.error(f" Error validating final plan: {e}")
-            print(f"  Validation warning: {e}")
-            # Try to parse anyway
-            try:
-                updated_plan = json.loads(final_result.final_output)
-            except:
-                # If parsing fails, merge changes into current plan
-                updated_plan = current_plan.copy()
-                # Update recommendations with new outputs
-                if "recommendations" not in updated_plan:
-                    updated_plan["recommendations"] = {}
-                for agent_name in changed_sections:
-                    if agent_name in updated_outputs:
-                        updated_plan["recommendations"][agent_name] = updated_outputs[agent_name]
+        # Convert Pydantic model to dict for JSON serialization
+        updated_plan = to_dict(final_result.final_output)
+        logger.info(" Final plan regenerated successfully")
+        print(" Final plan regenerated")
     except Exception as e:
         logger.error(f" Error regenerating final plan: {e}")
         print(f"  Error regenerating plan: {e}")

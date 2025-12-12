@@ -48,17 +48,17 @@ class TallyMCPServer:
             with urllib.request.urlopen(create_req) as response:
                 form_result = json.loads(response.read().decode('utf-8'))
                 form_id = form_result.get('id')
-                print(f"✅ Blank form created with ID: {form_id}", file=sys.stderr)
+                print(f" Blank form created with ID: {form_id}", file=sys.stderr)
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8')
-            print(f"❌ Step 1 failed - HTTP Error {e.code}: {error_body}", file=sys.stderr)
+            print(f" Step 1 failed - HTTP Error {e.code}: {error_body}", file=sys.stderr)
             return {"error": f"Failed to create blank form: HTTP {e.code}: {error_body}", "status_code": e.code}
         except Exception as e:
-            print(f"❌ Step 1 failed - Exception: {e}", file=sys.stderr)
+            print(f" Step 1 failed - Exception: {e}", file=sys.stderr)
             return {"error": f"Failed to create blank form: {str(e)}"}
         
         # Step 2: Add blocks via PATCH
-        print(f"📝 Step 2: Adding blocks to form {form_id}...", file=sys.stderr)
+        print(f" Step 2: Adding blocks to form {form_id}...", file=sys.stderr)
         
         # Map field types to Tally's block types
         type_mapping = {
@@ -133,7 +133,7 @@ class TallyMCPServer:
             "blocks": blocks
         }
         
-        print(f"📨 Patching form with {len(blocks)} blocks", file=sys.stderr)
+        print(f" Patching form with {len(blocks)} blocks", file=sys.stderr)
         
         patch_req = urllib.request.Request(
             patch_url,
@@ -145,14 +145,14 @@ class TallyMCPServer:
         try:
             with urllib.request.urlopen(patch_req) as response:
                 result = json.loads(response.read().decode('utf-8'))
-                print(f"✅ Step 2 complete! Form published with blocks", file=sys.stderr)
+                print(f" Step 2 complete! Form published with blocks", file=sys.stderr)
                 return result
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8')
-            print(f"❌ Step 2 failed - HTTP Error {e.code}: {error_body}", file=sys.stderr)
+            print(f" Step 2 failed - HTTP Error {e.code}: {error_body}", file=sys.stderr)
             return {"error": f"Failed to add blocks: HTTP {e.code}: {error_body}", "status_code": e.code, "form_id": form_id}
         except Exception as e:
-            print(f"❌ Step 2 failed - Exception: {e}", file=sys.stderr)
+            print(f" Step 2 failed - Exception: {e}", file=sys.stderr)
             return {"error": f"Failed to add blocks: {str(e)}", "form_id": form_id}
 
 
@@ -222,11 +222,11 @@ def handle_tools_list(request_id: Optional[Any]):
 
 def handle_tools_call(request_id: Optional[Any], tool_name: str, arguments: dict[str, Any]):
     """Execute a tool."""
-    print(f"🔧 Tool called: {tool_name} with args: {arguments}", file=sys.stderr)
+    print(f" Tool called: {tool_name} with args: {arguments}", file=sys.stderr)
     
     api_key = os.environ.get("TALLY_API_KEY")
     if not api_key:
-        print("❌ TALLY_API_KEY not set!", file=sys.stderr)
+        print(" TALLY_API_KEY not set!", file=sys.stderr)
         return {
             "jsonrpc": "2.0",
             "id": request_id,
@@ -242,17 +242,17 @@ def handle_tools_call(request_id: Optional[Any], tool_name: str, arguments: dict
             }
         }
     
-    print(f"✅ API key found: {api_key[:10]}...", file=sys.stderr)
+    print(f" API key found: {api_key[:10]}...", file=sys.stderr)
     
     if tool_name == "create_form":
-        print("📝 Creating form via Tally API...", file=sys.stderr)
+        print(" Creating form via Tally API...", file=sys.stderr)
         server = TallyMCPServer(api_key)
         result = server.create_form(
             title=arguments["title"],
             fields=arguments["fields"]
         )
         
-        print(f"📤 Form creation result: {result}", file=sys.stderr)
+        print(f" Form creation result: {result}", file=sys.stderr)
         
         return {
             "jsonrpc": "2.0",

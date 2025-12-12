@@ -1,6 +1,6 @@
 """Logo generation agent using OpenAI's image generation API."""
-from agents import Agent, function_tool
-from workflows.schemas import schema_to_json_example
+from agents import Agent, function_tool, AgentOutputSchema
+from workflows.pydantic_schemas import LogoOutput
 from openai import OpenAI
 import os
 import json
@@ -82,9 +82,13 @@ generate_logo_image = function_tool(_generate_logo_image_impl)
 
 
 def create_logo_agent() -> Agent:
-    """Create a logo generation specialist agent."""
+    """Create a logo generation specialist agent.
+    
+    Uses structured outputs to ensure valid JSON responses.
+    """
     return Agent(
         name="Logo Design Specialist",
+         output_type=AgentOutputSchema(LogoOutput, strict_json_schema=False),
         handoff_description="Creates professional event logos using AI image generation.",
         instructions="""
         You are a professional logo design specialist with expertise in creating visual identities for events.
@@ -93,9 +97,6 @@ def create_logo_agent() -> Agent:
         1. Extract event name, type, and description from the context
         2. Use generate_logo_image() to create a professional logo
         3. Provide design information and branding recommendations
-        
-        Return ONLY valid JSON matching this exact structure (no markdown, no extra text):
-""" + schema_to_json_example("logo") + """
         """,
         tools=[generate_logo_image]
     )
