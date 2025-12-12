@@ -163,29 +163,29 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
             print("2. Unsandboxed - Official Tally mcp-remote server")
             print("   ⚠️  No sandboxing (direct system access)")
             print("   ⚠️  OAuth2 authentication (may have issues)")
-            print("   ⚠️  External npm package dependency\n")
+            print("     External npm package dependency\n")
             
             while True:
                 choice = input("Enter your choice (1 or 2): ").strip()
                 if choice == "1":
                     USE_SANDBOXED_FORMS = True
-                    print("\n✅ Using sandboxed local MCP server for forms\n")
+                    print("\n Using sandboxed local MCP server for forms\n")
                     break
                 elif choice == "2":
                     USE_SANDBOXED_FORMS = False
-                    print("\n✅ Using unsandboxed Tally mcp-remote for forms\n")
+                    print("\n Using unsandboxed Tally mcp-remote for forms\n")
                     break
                 else:
-                    print("⚠️  Invalid choice. Please enter 1 or 2.\n")
+                    print("  Invalid choice. Please enter 1 or 2.\n")
         except (EOFError, OSError):
             # Non-interactive mode (e.g., API call) - use default
             USE_SANDBOXED_FORMS = False
-            print("\n✅ Non-interactive mode: Using unsandboxed Tally mcp-remote for forms\n")
+            print("\n Non-interactive mode: Using unsandboxed Tally mcp-remote for forms\n")
 
     # ============================================================
     # PHASE 1: COORDINATOR PLANNING
     # ============================================================
-    print("📋 PHASE 1: Strategic Planning\n")
+    print(" PHASE 1: Strategic Planning\n")
     print("Coordinator analyzing event requirements...\n")
 
     # Install custom asyncio exception handler to suppress MCP cleanup errors
@@ -224,14 +224,14 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     # Setup Tally MCP based on user preference
     if USE_SANDBOXED_FORMS:
         try:
-            print("🔒 Setting up sandboxed local Tally MCP server...\n")
+            print(" Setting up sandboxed local Tally MCP server...\n")
             custom_mcp_dir = Path(__file__).parent.parent / "custom_mcp_servers"
             tally_server = loop.run_until_complete(setup_sandboxed_local_tally_mcp(custom_mcp_dir))
             _tally_server_ref = tally_server  # Keep global reference to prevent GC
-            print("✅ Custom Tally MCP initialized - forms will be sandboxed\n")
+            print(" Custom Tally MCP initialized - forms will be sandboxed\n")
         except Exception as e:
-            print(f"⚠️  Sandboxed Tally MCP setup failed: {e}\n")
-            print("⏸️  Forms will not be created\n")
+            print(f"  Sandboxed Tally MCP setup failed: {e}\n")
+            print("⏸  Forms will not be created\n")
             tally_server = None
             _tally_server_ref = None
     else:
@@ -269,13 +269,13 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     try:
         planning_data = json.loads(planning_result.final_output)
         required_agents = planning_data.get("required_agents", all_agent_types[:6])
-        print(f"✅ Planning complete!")
+        print(f" Planning complete!")
         print(f"\n� Selected agents (in order): {', '.join(required_agents)}")
-        print(f"💡 Rationale: {planning_data.get('execution_order_rationale', 'N/A')}\n")
+        print(f" Rationale: {planning_data.get('execution_order_rationale', 'N/A')}\n")
     except:
         # Fallback if parsing fails
         required_agents = all_agent_types[:6]
-        print(f"⚠️  Using default agent selection\n")
+        print(f"  Using default agent selection\n")
 
     # ============================================================
     # PHASE 2: SPECIALIST EXECUTION
@@ -294,7 +294,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
     
     for idx, agent_name in enumerate(required_agents, 1):
         if agent_name not in all_specialists:
-            print(f"⚠️  Skipping unknown agent: {agent_name}")
+            print(f"  Skipping unknown agent: {agent_name}")
             continue
             
         # Update status to working
@@ -310,7 +310,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         
         agent = all_specialists[agent_name]
         
-        print(f"[{idx}/{len(required_agents)}] 🎯 {agent_name.title()} Specialist")
+        print(f"[{idx}/{len(required_agents)}]  {agent_name.title()} Specialist")
         print(f"{'─'*40}")
         
         # Build context-aware prompt with prior outputs
@@ -328,7 +328,7 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         result = Runner.run_sync(agent, specialist_prompt, max_turns=AGENT_MAX_TURNS)
         
         # Log raw agent output for debugging
-        print(f"   📄 Raw agent output ({len(result.final_output)} chars): {result.final_output[:300]}...")
+        print(f"    Raw agent output ({len(result.final_output)} chars): {result.final_output[:300]}...")
         logger.info(f"Agent '{agent_name}' output length: {len(result.final_output)} chars")
         logger.debug(f"Agent '{agent_name}' full output: {result.final_output}")
         
@@ -336,10 +336,10 @@ def run_event_planning(event_details: Dict[str, Any], progress_tracker: Dict[str
         try:
             validated_output = validate_agent_output(agent_name, result.final_output)
             specialist_outputs[agent_name] = validated_output
-            print(f"   ✅ Output validated successfully")
+            print(f"    Output validated successfully")
             logger.info(f"Agent '{agent_name}' validation: SUCCESS")
         except ValueError as e:
-            print(f"⚠️  Schema validation error for {agent_name}: {e}")
+            print(f"  Schema validation error for {agent_name}: {e}")
             logger.warning(f"Agent '{agent_name}' validation FAILED: {e}")
             print(f"   Attempting to parse JSON anyway...")
             

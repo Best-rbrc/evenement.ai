@@ -1,4 +1,4 @@
-"""AI Event Planner - Pre-filled example for testing."""
+"""AI Event Planner - CLI input and workflow call."""
 import json
 import os
 import sys
@@ -14,7 +14,7 @@ def check_api_key():
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("\n" + "="*60)
-        print("❌ ERROR: OpenAI API Key Not Found")
+        print(" ERROR: OpenAI API Key Not Found")
         print("="*60)
         print("The OpenAI Agents SDK requires an API key to run.")
         print("\nTo fix this, set your API key:")
@@ -25,6 +25,29 @@ def check_api_key():
         print("="*60 + "\n")
         sys.exit(1)
     return api_key
+
+def collect_event_details():
+    """Collect basic event information from the user."""
+    print("🎉 Welcome to the AI Event Planner!")
+    print("I'll help you plan your event by asking a few key questions.\n")
+
+    event_type = input("What type of event are you planning? (e.g., wedding, corporate conference, tech conference, birthday party, gala dinner, workshop, networking event, product launch, charity fundraiser, retreat): ").strip().lower()
+    event_name = input("What's the name of your event? ").strip()
+    event_date = input("When is your event? (e.g., 'March 15, 2024' or 'Q2 2024'): ").strip()
+    location_preference = input("Do you have a preferred location or city? (or 'flexible'): ").strip()
+    budget_range = input("What's your approximate budget range? (e.g., '$5,000-$10,000', 'under $2,000', 'flexible'): ").strip()
+    guest_count = input("How many guests/attendees are you expecting? (e.g., '50-100', '200+', 'flexible'): ").strip()
+    special_requirements = input("Any special requirements or themes? (e.g., 'outdoor venue', 'vegetarian catering', 'accessibility needs', 'corporate theme'): ").strip()
+
+    return {
+        "event_type": event_type,
+        "event_name": event_name,
+        "event_date": event_date,
+        "location_preference": location_preference,
+        "budget_range": budget_range,
+        "guest_count": guest_count,
+        "special_requirements": special_requirements
+    }
 
 def main():
     check_api_key()
@@ -39,52 +62,33 @@ def main():
             pass
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
-    # Pre-filled event details for testing
-    details = {
-        "event_type": "tech conference",
-        "event_name": "AI Innovation Summit 2026",
-        "event_date": "March 15, 2026",
-        "location_preference": "San Francisco",
-        "budget_range": "$50,000-$100,000",
-        "guest_count": "300-500",
-        "special_requirements": "AI/ML focus, keynote speakers, networking sessions, accessibility needs"
-    }
-    
-    print("🎉 AI Event Planner - Running with Pre-filled Data")
-    print("="*60)
-    print("Event Details:")
-    for key, value in details.items():
-        print(f"  {key}: {value}")
-    print("="*60)
-    print("\n🚀 Starting event planning workflow...\n")
-    
+    details = collect_event_details()
     result = run_event_planning(details)
 
     print("\n" + "="*60)
-    print(f"📋 EVENT PLANNING RESULTS — {details.get('event_name','(unnamed)')}")
+    print(f" EVENT PLANNING RESULTS — {details.get('event_name','(unnamed)')}")
     print("="*60)
     
     if isinstance(result, dict):
         # Print summary of outputs
-        print(f"\n✅ Planning completed successfully!")
-        print(f"\n📁 Generated Outputs:")
+        print(f"\n Planning completed successfully!")
+        print(f"\n Generated Outputs:")
         
         if result.get('pdf_generated') and result.get('pdf_report'):
-            print(f"   📄 PDF Report: {result['pdf_report']}")
+            print(f"    PDF Report: {result['pdf_report']}")
         
         # Try to parse calendar output for ICS file path
         try:
             calendar_data = json.loads(result.get('calendar_invite', '{}'))
             if 'calendar_file_path' in calendar_data:
-                print(f"   📅 Calendar File: {calendar_data['calendar_file_path']}")
+                print(f"    Calendar File: {calendar_data['calendar_file_path']}")
         except:
             pass
         
         if result.get('registration_form', {}).get('status') == 'success':
-            print(f"   📝 Registration Form: {result['registration_form'].get('form_url', 'N/A')}")
+            print(f"    Registration Form: {result['registration_form'].get('form_url', 'N/A')}")
         
-        print(f"\n📊 Agents Used: {', '.join(result.get('agents_used', []))}")
+        print(f"\n Agents Used: {', '.join(result.get('agents_used', []))}")
         
         # Print full result as JSON (can be saved to file)
         print(f"\n{'='*60}")
