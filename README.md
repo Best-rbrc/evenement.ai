@@ -1,4 +1,13 @@
-# AI Event Planner Agent
+# evenement.ai – Multi-Agent AI Event Planner
+
+**Describe an event and get a complete, actionable plan back:** venue, catering, budget, schedule, speakers, programme, communication, a registration form, a calendar file and a PDF proposal.
+
+A coordinator agent picks the specialists an event needs and orchestrates **12 specialist agents** built on the **OpenAI Agents SDK**. The whole system is also exposed as an **MCP server**, so it works directly inside Claude Desktop, Cursor and other MCP clients.
+
+**Stack:** Python · OpenAI Agents SDK · FastMCP · Pydantic · React 18 + Vite + TypeScript · Tally · Twilio
+
+---
+
 
 An intelligent, multi-agent event planning system powered by OpenAI Agents SDK that orchestrates specialized AI agents to create comprehensive, actionable event plans. The system provides both a web interface and MCP (Model Context Protocol) server integration for seamless integration with AI assistants and development tools.
 
