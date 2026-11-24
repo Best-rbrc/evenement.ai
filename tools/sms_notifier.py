@@ -17,8 +17,8 @@ def send_event_sms(
     Args:
         event_details: Event information dict with at least 'event_name' and 'event_date'
         form_url: Optional registration form URL to include in SMS
-        recipient_phone: Optional recipient phone number (defaults to env var or hardcoded)
-        from_phone: Optional sender phone number (defaults to env var or hardcoded)
+        recipient_phone: Optional recipient phone number (defaults to env var)
+        from_phone: Optional sender phone number (defaults to env var)
     
     Returns:
         Dict with:
@@ -35,13 +35,13 @@ def send_event_sms(
             "error": "Twilio library not installed. Install with: pip install twilio"
         }
     
-    # Get Twilio credentials from environment variables with hardcoded defaults
-    account_sid = os.getenv('TWILIO_ACCOUNT_SID', 'TWILIO_ACCOUNT_SID_REMOVED')
-    auth_token = os.getenv('TWILIO_AUTH_TOKEN', 'TWILIO_AUTH_TOKEN_REMOVED')
+    # Get Twilio credentials from environment variables
+    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
     
-    # Get phone numbers from parameters, env vars, or defaults
-    from_phone_number = from_phone or os.getenv('TWILIO_FROM_PHONE', '+10000000000')
-    to_phone_number = recipient_phone or os.getenv('TWILIO_TO_PHONE', '+10000000000')
+    # Get phone numbers from parameters or env vars
+    from_phone_number = from_phone or os.getenv('TWILIO_FROM_PHONE')
+    to_phone_number = recipient_phone or os.getenv('TWILIO_TO_PHONE')
     
     # Validate credentials
     if not account_sid or not auth_token:
@@ -49,6 +49,13 @@ def send_event_sms(
             "success": False,
             "message_sid": None,
             "error": "Twilio credentials not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables."
+        }
+
+    if not from_phone_number or not to_phone_number:
+        return {
+            "success": False,
+            "message_sid": None,
+            "error": "Phone numbers not configured. Set TWILIO_FROM_PHONE and TWILIO_TO_PHONE environment variables."
         }
     
     try:
